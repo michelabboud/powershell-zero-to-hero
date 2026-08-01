@@ -141,11 +141,9 @@ class InventoryContractTests(unittest.TestCase):
 class BuildPipelineTests(unittest.TestCase):
     def test_readme_documents_connected_markdown_to_pdf_pipeline(self) -> None:
         readme = (ROOT / 'README.md').read_text(encoding='utf-8')
-        self.assertIn('pandoc --from=gfm --to=typst --standalone', readme)
-        self.assertIn(
-            'typst compile --root . powershell-zero-to-hero.typ',
-            readme,
-        )
+        self.assertIn('python3 scripts/build_book.py --check', readme)
+        self.assertIn('python3 scripts/build_book.py --edition all --format all', readme)
+        self.assertNotIn('python3 assets/build-book.py', readme)
         self.assertNotIn('typst compile assets/body.typ', readme)
 
     def test_pipeline_propagates_chapter_edits_and_author_metadata(self) -> None:
@@ -154,54 +152,36 @@ class BuildPipelineTests(unittest.TestCase):
         self.assertFalse(missing, f'missing build tools: {missing}')
 
         chapter = ROOT / 'chapters' / '00-preface.md'
-        markdown = ROOT / 'powershell-zero-to-hero.md'
-        typst = ROOT / 'powershell-zero-to-hero.typ'
-        dist = ROOT / 'dist'
-        pdf = dist / 'publication-contract-test.pdf'
+        markdown = ROOT / 'build' / 'main.md'
+        typst_body = ROOT / 'build' / 'main-body.typ'
+        pdf = ROOT / 'dist' / 'powershell-zero-to-hero.pdf'
+        historical_pdf = ROOT / 'powershell-zero-to-hero.pdf'
+        source_inventory = load_inventory(SOURCE_INVENTORY)
+        historical_entry = next(
+            entry
+            for entry in source_inventory['files']
+            if entry['path'] == 'powershell-zero-to-hero.pdf'
+        )
+        historical_before = sha256(historical_pdf)
         original = chapter.read_text(encoding='utf-8')
 
         try:
             chapter.write_text(f'{original}\n\n{FLOW_MARKER}\n', encoding='utf-8')
             subprocess.run(
-                [sys.executable, 'assets/build-book.py'],
+                [
+                    sys.executable,
+                    'scripts/build_book.py',
+                    '--edition',
+                    'main',
+                    '--format',
+                    'pdf',
+                ],
                 cwd=ROOT,
                 check=True,
                 stdout=subprocess.DEVNULL,
             )
-            subprocess.run(
-                [
-                    'pandoc',
-                    '--from=gfm',
-                    '--to=typst',
-                    '--standalone',
-                    '--metadata',
-                    'title=PowerShell: Zero to Hero',
-                    '--metadata',
-                    'author=Michel Abboud',
-                    '--variable',
-                    'mainfont=Libertinus Serif',
-                    '--include-before-body=assets/document-metadata.typ',
-                    'powershell-zero-to-hero.md',
-                    '--output=powershell-zero-to-hero.typ',
-                ],
-                cwd=ROOT,
-                check=True,
-            )
-            dist.mkdir(exist_ok=True)
-            subprocess.run(
-                [
-                    'typst',
-                    'compile',
-                    '--root',
-                    '.',
-                    'powershell-zero-to-hero.typ',
-                    'dist/publication-contract-test.pdf',
-                ],
-                cwd=ROOT,
-                check=True,
-            )
 
-            typst_text = typst.read_text(encoding='utf-8')
+            typst_text = typst_body.read_text(encoding='utf-8')
             pdf_info = subprocess.check_output(
                 ['pdfinfo', pdf],
                 text=True,
@@ -212,14 +192,14 @@ class BuildPipelineTests(unittest.TestCase):
             self.assertIn(FLOW_MARKER, typst_text)
             self.assertIn(FLOW_MARKER, pdf_text)
             self.assertIn('Author:          Michel Abboud', pdf_info)
-            self.assertIn('Created by Visual Forge', pdf_text)
+            self.assertEqual(pdf_text.count('Created by Visual Forge'), 1)
+            self.assertEqual(historical_before, historical_entry['sha256'])
+            self.assertEqual(sha256(historical_pdf), historical_before)
         finally:
             chapter.write_text(original, encoding='utf-8')
             markdown.unlink(missing_ok=True)
-            typst.unlink(missing_ok=True)
+            typst_body.unlink(missing_ok=True)
             pdf.unlink(missing_ok=True)
-            if dist.exists() and not any(dist.iterdir()):
-                dist.rmdir()
 
 
 if __name__ == '__main__':

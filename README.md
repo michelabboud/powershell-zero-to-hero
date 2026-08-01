@@ -10,27 +10,29 @@ A comprehensive illustrated training guide for tech professionals.
 
 ## Building the Book
 
-Requires Python 3, Pandoc 3.1+, [Typst](https://typst.app/), and the
-Libertinus Serif font.
+The standalone build requires Python 3, Pandoc 3.1 or later, Typst 0.14 or
+later, and the Libertinus Serif font. Check the complete local toolchain and
+manifest without generating files:
 
 ```bash
-# Assemble the chapter and appendix Markdown
-python3 assets/build-book.py
-
-# Convert that exact Markdown to a standalone Typst document
-pandoc --from=gfm --to=typst --standalone \
-  --metadata 'title=PowerShell: Zero to Hero' \
-  --metadata 'author=Michel Abboud' \
-  --variable 'mainfont=Libertinus Serif' \
-  --include-before-body=assets/document-metadata.typ \
-  --output=powershell-zero-to-hero.typ \
-  powershell-zero-to-hero.md
-
-# Compile the generated Typst document
-mkdir -p dist
-typst compile --root . powershell-zero-to-hero.typ \
-  dist/powershell-zero-to-hero.pdf
+python3 scripts/build_book.py --check
 ```
+
+Build the main guide and answer booklet as both PDF and HTML:
+
+```bash
+python3 scripts/build_book.py --edition all --format all
+```
+
+Use `--edition main|answers|all` and `--format pdf|html|all` to select a
+subset. The generated Markdown and Typst bodies are written under `build/`;
+final documents and their copied image assets are written under `dist/`.
+Both directories are ignored by Git.
+
+`book.json` is the only source for book metadata, source order, edition names,
+cover assets, and output names. Markdown in `chapters/`, `appendices/`, and
+`answers/` remains the canonical editable content. The tracked Typst
+entrypoint and `book/template.typ` provide layout only.
 
 Michel Abboud is the book author. Generated editions retain this exact creation
 credit:
@@ -62,9 +64,10 @@ pwsh ./tests/run-all.ps1
 - `answers/` -- Verified solutions for all exercises (separate booklet)
 - `tests/` -- Pester tests proving every answer works
 - `assets/images/` -- illustrations used throughout the guide
+- `book.json` -- canonical build metadata and source order
+- `book/` -- reusable Typst layout
+- `scripts/` -- standalone assembly, build, and validation commands
 - `docs/` -- source inventory and extraction provenance
 
 The root `powershell-zero-to-hero.pdf` is the byte-preserved historical edition.
-`assets/body.typ` is an extracted layout snapshot, not regenerated output.
-New local builds flow through the assembled Markdown and should be written to
-`dist/`.
+Never overwrite it; current local editions are generated under `dist/`.

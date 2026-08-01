@@ -1,0 +1,66 @@
+{
+  "title": "PowerShell: Zero to Hero",
+  "author": "Michel Abboud",
+  "version": "1.1.0",
+  "credit": "Created by Visual Forge",
+  "creationTimestamp": 1785542400,
+  "chapters": [
+    "chapters/00-preface.md",
+    "chapters/01-what-is-powershell.md",
+    "chapters/02-the-console.md",
+    "chapters/03-commands-and-cmdlets.md",
+    "chapters/04-variables-and-types.md",
+    "chapters/05-operators-and-expressions.md",
+    "chapters/06-control-flow.md",
+    "chapters/07-functions-and-scripts.md",
+    "chapters/08-the-pipeline-deep-dive.md",
+    "chapters/09-working-with-files.md",
+    "chapters/10-error-handling.md",
+    "chapters/11-regex-and-text.md",
+    "chapters/12-modules-and-packages.md",
+    "chapters/13-objects-and-dotnet.md",
+    "chapters/14-remote-and-jobs.md",
+    "chapters/15-active-directory.md",
+    "chapters/16-automation-recipes.md",
+    "chapters/17-devops-and-cicd.md"
+  ],
+  "appendices": [
+    "appendices/A-cheat-sheet.md",
+    "appendices/B-common-errors.md",
+    "appendices/C-from-bash-to-powershell.md"
+  ],
+  "answers": [
+    "answers/00-how-to-use-answers.md",
+    "answers/01-answers.md",
+    "answers/02-answers.md",
+    "answers/03-answers.md",
+    "answers/04-answers.md",
+    "answers/05-answers.md",
+    "answers/06-answers.md",
+    "answers/07-answers.md",
+    "answers/08-answers.md",
+    "answers/09-answers.md",
+    "answers/10-answers.md",
+    "answers/11-answers.md",
+    "answers/12-answers.md",
+    "answers/13-answers.md",
+    "answers/14-answers.md",
+    "answers/15-answers.md",
+    "answers/16-answers.md",
+    "answers/17-answers.md"
+  ],
+  "editions": {
+    "main": {
+      "title": "PowerShell: Zero to Hero",
+      "output": "powershell-zero-to-hero",
+      "frontCover": "assets/images/ps-cover.webp",
+      "backCover": "assets/images/ps-back-cover.webp"
+    },
+    "answers": {
+      "title": "PowerShell: Zero to Hero — Answer Booklet",
+      "output": "powershell-zero-to-hero-answer-booklet",
+      "frontCover": "assets/images/ps-cover.webp",
+      "backCover": "assets/images/ps-back-cover.webp"
+    }
+  }
+}

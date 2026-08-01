@@ -8,7 +8,7 @@ Thank you for helping improve *PowerShell: Zero to Hero*.
 - Pester 5.5 or later
 - Python 3
 - Pandoc 3.1 or later
-- Typst and the Libertinus Serif font, when producing a PDF
+- Typst 0.14 or later and the Libertinus Serif font
 
 ## Workflow
 
@@ -32,20 +32,13 @@ Run the answer tests:
 pwsh ./tests/run-all.ps1
 ```
 
-Rebuild the combined Markdown and PDF:
+Validate the build inputs and toolchain, then build all four current artifacts:
 
 ```bash
-python3 assets/build-book.py
-pandoc --from=gfm --to=typst --standalone \
-  --metadata 'title=PowerShell: Zero to Hero' \
-  --metadata 'author=Michel Abboud' \
-  --variable 'mainfont=Libertinus Serif' \
-  --include-before-body=assets/document-metadata.typ \
-  --output=powershell-zero-to-hero.typ \
-  powershell-zero-to-hero.md
-mkdir -p dist
-typst compile --root . powershell-zero-to-hero.typ \
-  dist/powershell-zero-to-hero.pdf
+python3 scripts/build_book.py --check
+python3 scripts/build_book.py --edition all --format all
 ```
 
+Update `book.json` when source order or edition metadata changes. Do not add a
+second build workflow or edit generated files under `build/` or `dist/`.
 Generated files and test results must remain untracked.

@@ -58,6 +58,7 @@ IGNORED_ROOTS = frozenset(
         '.pytest_cache',
         '.ruff_cache',
         '__pycache__',
+        'build',
         'dist',
         'test-results',
     },
@@ -782,7 +783,7 @@ def _text_candidates(root: Path) -> Iterable[tuple[str, str]]:
 
 def _is_repository_metadata(relative: str) -> bool:
     first = PurePosixPath(relative).parts[0]
-    return first not in {'answers', 'appendices', 'chapters'} and relative != 'assets/body.typ'
+    return first not in {'answers', 'appendices', 'chapters'}
 
 
 def _validate_publication_policy(root: Path, issues: list[ValidationIssue]) -> None:

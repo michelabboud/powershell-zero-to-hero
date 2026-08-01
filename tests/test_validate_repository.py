@@ -259,6 +259,15 @@ class ValidatorTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_ignores_generated_book_build_directory(self) -> None:
+        generated = self.fixture.root / 'build' / 'main.md'
+        generated.parent.mkdir(parents=True)
+        generated.write_text('# Generated book\n', encoding='utf-8')
+
+        result = self.run_validator()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_reports_missing_chapter(self) -> None:
         missing = 'chapters/05-operators-and-expressions.md'
         (self.fixture.root / missing).unlink()

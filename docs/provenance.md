@@ -26,16 +26,17 @@ historical credits and styling may differ from the standalone sources.
 
 ## Future Builds
 
-The chapter and appendix Markdown files are the maintainable source of truth.
-`python3 assets/build-book.py` assembles them into combined Markdown.
-Pandoc converts that combined Markdown into the generated root
-`powershell-zero-to-hero.typ`, and Typst compiles that generated document to
-`dist/powershell-zero-to-hero.pdf`. Michel Abboud is set as the author in both
-the visible Pandoc title block and the PDF document metadata. Generated
-editions carry this exact creation credit:
+The chapter, appendix, and answer Markdown files are the maintainable content
+source of truth. `book.json` is the sole order and build-metadata authority.
+`python3 scripts/build_book.py --edition all --format all` assembles both
+editions under `build/`, invokes Pandoc for HTML and Typst body generation,
+and invokes Typst for PDF generation. Michel Abboud is set as the visible and
+document-metadata author. Generated editions carry this exact creation credit:
 
 `Created by Visual Forge`
 
-`assets/body.typ` is the extracted layout snapshot and is not presented as
-regenerated output. Generated artifacts belong in `dist/` and must not
-replace the historical root PDF.
+The tracked `powershell-zero-to-hero.typ` entrypoint and `book/template.typ`
+provide layout without duplicating manifest metadata. Generated Markdown and
+Typst bodies belong in ignored `build/`; final documents and copied image
+assets belong in ignored `dist/`. Neither location may replace the historical
+root PDF.

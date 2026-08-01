@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "destinationDescriptor": "public-standalone-working-tree",
-  "capturedAt": "2026-08-01T08:51:18Z",
+  "capturedAt": "2026-08-01T09:30:02Z",
   "excludedPaths": [
     "docs/destination-inventory.json",
     "docs/source-inventory.json"
@@ -9,13 +9,13 @@
   "files": [
     {
       "path": ".gitignore",
-      "bytes": 222,
-      "sha256": "fb4ffd4a6dad37f56e8827fc7bb581f738aff1160c676ab157e76c8868c859ae"
+      "bytes": 173,
+      "sha256": "92f0c87f175a6a1d40cd52e50f52cb60bdce0d0196fec7ef483dff9528dce027"
     },
     {
       "path": "CONTRIBUTING.md",
-      "bytes": 1433,
-      "sha256": "7b99f4ef914192708d5f810eec99cd32093b5516eb8699461b93d3de1b7a88cd"
+      "bytes": 1284,
+      "sha256": "8e3defb219afeb25741be48cfdda32beea754631d753223afd491073fe4b74a0"
     },
     {
       "path": "LICENSE",
@@ -24,8 +24,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 2050,
-      "sha256": "d72a99caa3da8476eb4ef8642c5cda5e08db8e67c41a8a0c45f182f512750cec"
+      "bytes": 2353,
+      "sha256": "5aed529a5448be46250baaa00ef3d8e95aad25cdfc21b1b457667c08d7840adb"
     },
     {
       "path": "VERSION",
@@ -136,21 +136,6 @@
       "path": "appendices/C-from-bash-to-powershell.md",
       "bytes": 13691,
       "sha256": "85a136cef447eb7301a1921065aa5672dd342c70e11bb141a83f79fa003130b0"
-    },
-    {
-      "path": "assets/body.typ",
-      "bytes": 345972,
-      "sha256": "23b3a0af2c1de5d270525b03406ce7937594cf5d821305353246add3e72f905e"
-    },
-    {
-      "path": "assets/build-book.py",
-      "bytes": 1622,
-      "sha256": "326840a5bca2e36a9e1f19e002a69e7df7b3e8c0ab038c3c054bdf996c91549c"
-    },
-    {
-      "path": "assets/document-metadata.typ",
-      "bytes": 84,
-      "sha256": "160ad1f49b33402623d24589d54ef89ab0eae0e141df88238a7acb4f5d74aaab"
     },
     {
       "path": "assets/images/app-A-cmdlet-quickref.png",
@@ -843,6 +828,16 @@
       "sha256": "1043afb396c52a591779969b6b7ae6d8d5d665d70e92e9d9ef2a89ec1150981e"
     },
     {
+      "path": "book.json",
+      "bytes": 2078,
+      "sha256": "80bb3fcb9706f0d88b21dc94e3e7b1daebcee0008ac8de4f825d8787d834c5c6"
+    },
+    {
+      "path": "book/template.typ",
+      "bytes": 1523,
+      "sha256": "fbada65ba6a4b3c62d07113aa3ae78b9abda0cc142396856af9b15d10835c93b"
+    },
+    {
       "path": "chapters/00-preface.md",
       "bytes": 6532,
       "sha256": "5ce75e7716fe39183174b665606f614df506dd693a01a3c15287a23eca776f22"
@@ -934,8 +929,8 @@
     },
     {
       "path": "docs/provenance.md",
-      "bytes": 1951,
-      "sha256": "81f8565d817817ee9b759a61c471b3506dc690cbbca222c3a5202fb2bd0726da"
+      "bytes": 2068,
+      "sha256": "dc9ee443a58c9e974d2d34091e45f4496a0bd54f407859fd78033ad13c89b173"
     },
     {
       "path": "powershell-zero-to-hero.pdf",
@@ -943,9 +938,24 @@
       "sha256": "c42307c89db74498e94656b41cf03d7d0c42d292ac287ad4d8727f8e9595c12b"
     },
     {
+      "path": "powershell-zero-to-hero.typ",
+      "bytes": 771,
+      "sha256": "177b4c4f4148684d1a816ef5e571a4e7f4fd27b95377c9cb9083f32671bb0238"
+    },
+    {
+      "path": "scripts/assemble_book.py",
+      "bytes": 3662,
+      "sha256": "9388b1120fd67a50c8b786920ced58c51a638210b27fda903b99197a7b9a802f"
+    },
+    {
+      "path": "scripts/build_book.py",
+      "bytes": 11270,
+      "sha256": "76155d951bbe7db1e1422a85c059a6b72d22193e008596977568c7448022f91a"
+    },
+    {
       "path": "scripts/validate_repository.py",
-      "bytes": 34205,
-      "sha256": "8f9a1aaee451c9a4e6ae09d247c5b555f08e73c7123b8059f961b424fb740906"
+      "bytes": 34188,
+      "sha256": "e49e17f4ce0c03842f395aae11fdc8fb4d7de0078f01127e57b7dc30c2ca3530"
     },
     {
       "path": "tests/ch-01.tests.ps1",
@@ -1039,13 +1049,18 @@
     },
     {
       "path": "tests/test-publication-contract.py",
-      "bytes": 8264,
-      "sha256": "657b2e493e2b11b50caf4f9066f19dfaf6964f5d2c9a85f69ba372df78f79e88"
+      "bytes": 7781,
+      "sha256": "41f7b189820e7f67e368974df51b1e476567c61bde30196f83eb63fafe8cc3db"
+    },
+    {
+      "path": "tests/test_build_book.py",
+      "bytes": 23842,
+      "sha256": "f0eb01551cbcc72a3639a7b0bcbdfc0f8cf86bc1a0449667bcf0ca70935ebe83"
     },
     {
       "path": "tests/test_validate_repository.py",
-      "bytes": 26840,
-      "sha256": "502dc09be6abe1bee661c4dae07812e9be00086d8e82eac76271a5e305a2b04b"
+      "bytes": 27200,
+      "sha256": "8c2a7971273f9e6f445983ed9107f72eb52fb36285be639bf02910af8e280cad"
     }
   ]
 }
