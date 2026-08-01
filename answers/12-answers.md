@@ -6,7 +6,7 @@
 
 **Task:** List all modules currently loaded in your session. Then list all
 available modules via `Get-Module -ListAvailable`. Find one module whose `Path`
-property indicates it came from the user-scoped PSGallery install location.
+property indicates it came from the user-scoped module location.
 Show its name and version.
 
 ### Solution
@@ -20,21 +20,24 @@ $loaded | Format-Table Name, Version, ModuleType -AutoSize
 $available = Get-Module -ListAvailable
 $available | Format-Table Name, Version, Path -AutoSize | Out-Host -Paging
 
-# Step 3: find a PSGallery-installed module
+# Step 3: find a user-scoped module
 # On Windows the user module path is ~/Documents/PowerShell/Modules
 # On Linux/macOS it's ~/.local/share/powershell/Modules
-$userModulesPath = Join-Path ([System.Environment]::GetFolderPath('MyDocuments')) `
-    'PowerShell' 'Modules'
+$userModulesPath = if ($IsWindows) {
+    Join-Path ([System.Environment]::GetFolderPath('MyDocuments')) 'PowerShell' 'Modules'
+} else {
+    Join-Path ([System.Environment]::GetFolderPath('UserProfile')) '.local' 'share' 'powershell' 'Modules'
+}
 
 $galleryModule = Get-Module -ListAvailable |
     Where-Object { $_.Path -like "$userModulesPath*" } |
     Select-Object -First 1
 
 if ($galleryModule) {
-    "Found PSGallery module: $($galleryModule.Name) v$($galleryModule.Version)"
+    "Found user-scope module: $($galleryModule.Name) v$($galleryModule.Version)"
     "Path: $($galleryModule.Path)"
 } else {
-    "No user-scope modules found. Try: Install-Module -Name Pester -Scope CurrentUser"
+    "No user-scope modules found. Try: Install-PSResource -Name Pester -Scope CurrentUser"
 }
 ```
 
@@ -48,8 +51,8 @@ Microsoft.PowerShell.Utility         7.0.0.0  Manifest
 Microsoft.PowerShell.Management      7.0.0.0  Manifest
 PSReadLine                           2.3.5    Script
 
-Found PSGallery module: Pester v5.6.1
-Path: /home/rina/.local/share/powershell/Modules/Pester/5.6.1/Pester.psd1
+Found user-scope module: Pester v6.0.1
+Path: /home/rina/.local/share/powershell/Modules/Pester/6.0.1/Pester.psd1
 ```
 
 ### What to notice
@@ -61,8 +64,7 @@ session** -- it's a live snapshot of what's in memory. `Get-Module
 property on each object tells you exactly where on disk the module lives. This
 is useful for diagnosing "why is the wrong version loading" problems, which
 happen more often than anyone would like to admit -- especially after a system
-`Install-Module` drops a module in a location that shadows your user-scoped
-version.
+a system-scoped installation shadows the user-scoped version you expected.
 
 ---
 
@@ -77,7 +79,7 @@ functions work, and confirm that a private helper is not accessible externally.
 
 ```powershell
 # Create module directory
-$modulePath = Join-Path $env:TEMP 'TimeUtils'
+$modulePath = Join-Path ([System.IO.Path]::GetTempPath()) 'TimeUtils'
 New-Item $modulePath -ItemType Directory -Force | Out-Null
 
 # Write the .psm1 file
@@ -177,7 +179,7 @@ version and author.
 
 ```powershell
 # Create module directory
-$modulePath = Join-Path $env:TEMP 'TimeUtils'
+$modulePath = Join-Path ([System.IO.Path]::GetTempPath()) 'TimeUtils'
 New-Item $modulePath -ItemType Directory -Force | Out-Null
 
 # Write the .psm1
@@ -241,26 +243,22 @@ Hello, World!
 1. **`Test-ModuleManifest` returns a real `ModuleInfo` object.** This is the
    same type that `Get-Module` returns -- you can inspect `ExportedFunctions`,
    `RequiredModules`, `PowerShellVersion`, and everything else through it.
-   Using it in CI is the right call: it validates that the `.psm1` file
-   referenced by `RootModule` actually exists, that `FunctionsToExport` lists
-   functions that are actually defined, and that the version string is valid
-   SemVer. These are exactly the things that get silently wrong when you
-   edit the manifest by hand.
+   Using it in CI is the right call: it validates manifest structure and
+   important references such as the `RootModule`, required modules, and
+   version metadata. Import the module and assert its exported commands as a
+   separate test; manifest validation alone doesn't prove function behavior.
 
-2. **`FunctionsToExport` in the manifest takes precedence over
-   `Export-ModuleMember` in the `.psm1`.** Both can coexist, but the manifest
-   wins for tab-completion and discovery. If your manifest says `@('Get-Greeting')`
-   but your `.psm1` exports three functions, users won't get tab-completion
-   for the two unlisted ones. Keep both in sync -- or pick one mechanism and
-   use it consistently. The Public/Private folder pattern (described in the
-   chapter) solves this by deriving `FunctionsToExport` programmatically.
+2. **Manifest and module exports work together.** `Export-ModuleMember`
+   defines what the script module offers, while `FunctionsToExport` filters
+   what the manifest exposes. Keep both in sync and verify the effective API
+   with `(Get-Module Name).ExportedFunctions.Keys` after import.
 
 3. **Module versioning via directory structure.** Once you have a manifest,
    you can install multiple versions side-by-side:
    `~/Documents/PowerShell/Modules/TimeUtils/1.0.0/` and
    `~/Documents/PowerShell/Modules/TimeUtils/2.0.0/`. PowerShell auto-selects
-   the latest unless you specify `-RequiredVersion`. This is how `Install-Module`
-   manages updates without breaking scripts that pin older versions.
+   the latest unless you specify `-RequiredVersion`. Resource managers preserve
+   this side-by-side layout so scripts can pin older versions.
 
 ---
 
@@ -276,7 +274,7 @@ public function works and the private helper is not accessible externally.
 
 ```powershell
 # Create module directory
-$modulePath = Join-Path $env:TEMP "DataUtils-$(Get-Random)"
+$modulePath = Join-Path ([System.IO.Path]::GetTempPath()) "DataUtils-$(Get-Random)"
 New-Item $modulePath -ItemType Directory -Force | Out-Null
 
 try {
@@ -285,9 +283,9 @@ try {
 #region Private
 
 function _ValidateInput {
-    param([string]$Input)
+    param([string]$Value)
     # Returns $true only if the string has meaningful content
-    -not [string]::IsNullOrWhiteSpace($Input)
+    -not [string]::IsNullOrWhiteSpace($Value)
 }
 
 #endregion Private

@@ -50,9 +50,14 @@ if (-not (Test-Path $PROFILE)) {
 
 # Write the profile content
 @'
-# --- Aliases ---
+# --- Cross-platform aliases ---
 Set-Alias -Name ll -Value Get-ChildItem
-Set-Alias -Name np -Value notepad
+$editor = if (Get-Command code -ErrorAction SilentlyContinue) {
+    'code'
+} else {
+    'Get-Content'
+}
+Set-Alias -Name edit -Value $editor
 
 # --- Greeting ---
 $user = $env:USERNAME ?? $env:USER
@@ -67,11 +72,12 @@ Write-Host ""
 
 ```
   Welcome back, Sam.
-  PowerShell 7.4.6 | 2026-03-17 09:15
+  PowerShell 7.6.4 | 2026-08-01 09:15
 ```
 
-After that, `ll` should list directory contents and `np` should launch
-Notepad.
+After that, `ll` lists directory contents. `edit` launches VS Code when the
+`code` command is available; otherwise it falls back to displaying a file with
+`Get-Content`. Replace the fallback with another editor command you have installed.
 
 **What to notice:**
 - `Set-Alias` creates a simple name-to-command mapping. It does not support

@@ -32,10 +32,10 @@ Positive
 
 ### What to notice
 
-PowerShell functions return values implicitly -- there is no `return` keyword required when
-the expression result is the last thing evaluated in a branch. Writing `'Negative'` as a
-bare string expression puts that string on the output stream, which becomes the function's
-return value when called from an assignment or pipeline.
+PowerShell functions write every unredirected success-stream value to their
+caller; there is no `return` keyword required here. Writing `'Negative'` as a
+bare string expression puts that string on the output stream. It is the only
+value this branch emits, so the caller receives that one string.
 
 The ordering of conditions matters: the `-lt 0` check comes first because if you put `else`
 at the top you'd catch everything. Always order your conditions from most specific to most
@@ -167,6 +167,7 @@ that rethrows after `MaxRetries` attempts.
 function Invoke-WithRetry {
     param(
         [scriptblock]$Action,
+        [ValidateRange(1, 10)]
         [int]$MaxRetries = 3
     )
 
@@ -234,3 +235,7 @@ Several design decisions worth understanding:
    800ms for attempts 0, 1, 2, 3. In production, add jitter:
    `$delayMs + (Get-Random -Minimum 0 -Maximum 50)` prevents all retrying clients from
    hitting your service at the same millisecond after a common failure.
+
+6. **Input validation**: `[ValidateRange(1, 10)]` prevents zero attempts and
+   places a deliberate ceiling on accidental retry storms. Production limits
+   should match the operation's latency and failure budget.

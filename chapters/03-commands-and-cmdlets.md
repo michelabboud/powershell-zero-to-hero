@@ -215,10 +215,9 @@ The objects keep their structure through every stage.
 A quick example combining several:
 
 ```powershell
-# Running services, grouped by start type, counted
-Get-Service |
-    Where-Object Status -eq 'Running' |
-    Group-Object StartType |
+# Processes, grouped by process name, counted (cross-platform)
+Get-Process |
+    Group-Object ProcessName |
     Select-Object Name, Count
 ```
 
@@ -246,7 +245,11 @@ Get-Process -Name pwsh
 Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 10 Name, @{N='MemMB';E={[math]::Round($_.WorkingSet64/1MB)}}
 ```
 
-### Get-Service
+### Get-Service (Windows only)
+
+`Get-Service` is available only on Windows in PowerShell 7. On Linux and macOS,
+use the platform's service manager (for example `systemctl` or `launchctl`) and
+treat its output as native-command text unless you convert it into objects.
 
 ```powershell
 # All services
@@ -329,12 +332,12 @@ things you can stop than you probably should.
 
 > <!-- tier: extreme -->
 > Chain five or more cmdlets to produce a single `PSCustomObject` containing
-> a system health summary. Include: total process count, number of running
-> services, system uptime in hours, total memory used by all processes (in MB),
+> a cross-platform system health summary. Include: total process count, total
+> process thread count, system uptime in hours, total memory used by all processes (in MB),
 > and the number of files in your temp directory.
 
 This is where everything in this chapter comes together -- `Get-Process`,
-`Get-Service`, `Measure-Object`, `Get-ChildItem`, and `PSCustomObject`
+`Measure-Object`, `Get-ChildItem`, `Get-Uptime`, and `PSCustomObject`
 construction. If you can do this, you own Chapter 03.
 
 ---

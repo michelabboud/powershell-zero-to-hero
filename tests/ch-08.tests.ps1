@@ -1,5 +1,5 @@
 #Requires -Version 7.4
-#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.5' }
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.7.1' }
 
 Describe "Chapter 08 - The Pipeline Deep Dive" {
     It "Ex-1 (Simple): filter processes by memory > threshold" {
@@ -35,7 +35,7 @@ Describe "Chapter 08 - The Pipeline Deep Dive" {
     }
 
     It "Ex-4 (Extreme): full pipeline with group, measure, and export" {
-        $tempCsv = Join-Path $env:TEMP "ps-test-export-$(Get-Random).csv"
+        $tempCsv = Join-Path ([System.IO.Path]::GetTempPath()) "ps-test-export-$(Get-Random).csv"
         try {
             # Create test data and process through pipeline
             $data = @(

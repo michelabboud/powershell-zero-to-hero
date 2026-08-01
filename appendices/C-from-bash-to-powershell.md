@@ -46,11 +46,11 @@ Thirty-plus operations, side by side. The "Notes" column is where the real educa
 | `top` | `Get-Process \| Sort-Object CPU -Descending \| Select-Object -First 20` | Or install `btop` / use Task Manager |
 | `df -h` | `Get-PSDrive` | Or `Get-Volume` on Windows for disk usage |
 | `du -sh dir/` | `(Get-ChildItem dir/ -Recurse \| Measure-Object Length -Sum).Sum / 1MB` | Result in MB |
-| `free -h` | `Get-CimInstance Win32_OperatingSystem \| Select-Object FreePhysicalMemory` | |
+| `free -h` | `Get-CimInstance Win32_OperatingSystem \| Select-Object FreePhysicalMemory` | Windows-only CIM class; use `free` on Linux |
 | `uname -a` | `$PSVersionTable` | Includes OS, PS version, .NET version |
-| `hostname` | `$env:COMPUTERNAME` | Or `hostname` — it still works |
-| `whoami` | `$env:USERNAME` | Or `[Security.Principal.WindowsIdentity]::GetCurrent().Name` |
-| `id` | `[Security.Principal.WindowsIdentity]::GetCurrent()` | Returns groups, SIDs, etc. |
+| `hostname` | `[Environment]::MachineName` | Cross-platform; native `hostname` also works |
+| `whoami` | `[Environment]::UserName` | Cross-platform username; native `whoami` includes platform identity details |
+| `id` | `id` | Use the native command on Unix; `WindowsIdentity` is Windows-only |
 | `echo "text"` | `Write-Output "text"` | `echo` is an alias for `Write-Output` in PS |
 | `printf "%s\n" "$var"` | `"{0}`n" -f $var` | Or just `"$var"` with double-quoted string |
 | `export VAR=value` | `$env:VAR = 'value'` | Affects child processes; `$VAR` is a local PS variable |
@@ -74,19 +74,19 @@ Thirty-plus operations, side by side. The "Notes" column is where the real educa
 | `$0` | `$MyInvocation.MyCommand.Name` | Script name |
 | `$@` / `$*` | `$args` | Array of unbound arguments |
 | `$1`, `$2` | `param($First, $Second)` | PS uses named parameters, not positional `$1` |
-| `command &` | `Start-Job { command }` | Background jobs; `Receive-Job` for output |
+| `command &` | `Start-Job { command }` | Out-of-process background job; `Receive-Job` for output |
 | `wait` | `Wait-Job -Job $job` | Wait for background job |
-| `nohup command` | `Start-Process -NoNewWindow command` | Or use `Start-Job` |
+| `nohup command` | No direct durable equivalent | Use the platform service/process manager for work that must survive the shell |
 | `curl https://...` | `Invoke-RestMethod https://...` | Auto-parses JSON; or `Invoke-WebRequest` for raw |
 | `wget url -O file` | `Invoke-WebRequest url -OutFile file` | |
 | `tar -czf out.tar.gz dir/` | `Compress-Archive -Path dir/ -DestinationPath out.zip` | PS uses ZIP, not tar.gz natively |
 | `tar -xzf file.tar.gz` | `Expand-Archive -Path file.zip -DestinationPath .` | |
-| `ssh user@host` | `Enter-PSSession -ComputerName host -Credential user` | WinRM-based; or use `ssh` (available on Windows 10+) |
-| `scp file user@host:/path` | `Copy-Item -Path file -Destination \\host\path` | Or use `ssh`/`scp` (both available on modern Windows) |
-| `cron` | `Register-ScheduledTask` | Full Task Scheduler integration |
-| `apt install pkg` | `Install-Module pkg` | For PS modules from PSGallery |
-| `apt install tool` | `winget install tool` | For system tools (Windows Package Manager) |
-| `pip install pkg` | `Install-Package pkg` | Via PackageManagement (NuGet, Chocolatey, etc.) |
+| `ssh user@host` | `Enter-PSSession -HostName host -UserName user` | PowerShell remoting over SSH; native `ssh` remains available |
+| `scp file user@host:/path` | `scp file user@host:/path` | Use the native OpenSSH client; an SMB path is a different transport |
+| `cron` | `Register-ScheduledTask` | Windows-only; keep cron/systemd timers on Unix |
+| `apt install pkg` | `Install-PSResource pkg` | Only for PowerShell resources from a registered repository, not OS packages |
+| `apt install tool` | `winget install tool` | Windows-only; use the host OS package manager elsewhere |
+| `pip install pkg` | No direct equivalent | Python packages and PowerShell resources have different managers |
 
 ---
 
@@ -191,7 +191,7 @@ This means `Sort-Object` in PowerShell sorts by object property values (integers
 |---|---|---|
 | Local variable | `var=value` | `$var = 'value'` |
 | Environment variable | `export VAR=value` | `$env:VAR = 'value'` |
-| Subshell scope | New shell = no access to parent vars | `Start-Job` runs in a new runspace; use `$using:var` |
+| Subshell scope | New shell = no access to parent vars | `Start-Job` runs in a separate process; use `$using:var` |
 | Function scope | Inherits parent scope by default | New scope by default; use `$script:` or `$global:` to escape |
 | Dot-source scope | `source script.sh` pollutes current scope | `. .\script.ps1` pollutes current scope (same!) |
 
@@ -214,23 +214,27 @@ Start-Job { $using:data }   # $using: prefix bridges the runspace boundary
 | Need | Bash (Debian/Ubuntu) | Bash (macOS) | PowerShell |
 |---|---|---|---|
 | Install system tool | `apt install htop` | `brew install htop` | `winget install htop` |
-| Install PS module | — | — | `Install-Module Az -Scope CurrentUser` |
-| Install any package | `apt install pkg` | `brew install pkg` | `Install-Package pkg` (PackageManagement) |
-| Search packages | `apt search term` | `brew search term` | `Find-Module term` / `Find-Package term` |
-| List installed | `dpkg -l` | `brew list` | `Get-InstalledModule` / `Get-Package` |
-| Update everything | `apt upgrade` | `brew upgrade` | `Update-Module` / `winget upgrade --all` |
-| Repository | apt repos | Homebrew taps | PSGallery (default) + NuGet + Chocolatey |
+| Install PS resource | — | — | `Install-PSResource Az -Scope CurrentUser` |
+| Install system package | `apt install pkg` | `brew install pkg` | Use the host OS manager (`winget` on Windows) |
+| Search PS resources | — | — | `Find-PSResource term` |
+| List installed PS resources | — | — | `Get-InstalledPSResource` |
+| Update PS resource | — | — | `Update-PSResource Name` |
+| Repository | apt repos | Homebrew taps | PSGallery plus registered PSResource repositories |
 
 ```powershell
 # Register an additional repository
-Register-PSRepository -Name 'MyInternalRepo' -SourceLocation 'https://repo.company.com/nuget'
+Register-PSResourceRepository -Name 'MyInternalRepo' -Uri 'https://repo.company.com/nuget'
 
 # Install from specific repo
-Install-Module -Name MyModule -Repository MyInternalRepo
+Install-PSResource -Name MyModule -Repository MyInternalRepo -Scope CurrentUser
 
 # Trust a repository so you're not prompted every time
-Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+Set-PSResourceRepository -Name PSGallery -Trusted
 ```
+
+`Microsoft.PowerShell.PSResourceGet` is the current resource-management
+module. The older `Find-Module`, `Install-Module`, and `*-PSRepository`
+commands remain common in Windows PowerShell and existing automation.
 
 ---
 

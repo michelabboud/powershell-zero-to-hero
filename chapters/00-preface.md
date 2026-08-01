@@ -60,7 +60,7 @@ That is it. No cloud subscriptions, no lab environment, no prior scripting exper
 
 ## The Answer Booklet
 
-Every exercise in this guide has a complete, tested solution in the companion **Answer Booklet** (available as a separate document). Every answer is validated with Pester tests -- PowerShell's built-in testing framework -- so you can verify that the solutions actually work and are not just plausible-looking pseudocode.
+Every numbered exercise in this guide has a complete, tested solution in the companion **Answer Booklet** (available as a separate document). Every answer is validated with Pester -- PowerShell's cross-platform testing framework -- so you can verify that the solutions actually work and are not just plausible-looking pseudocode. The open-ended Challenge and Boss Level prompts are manual practice: their environment-dependent checks are called out in the content audit.
 
 Here is the deal: **try the exercises first.** Give yourself at least fifteen minutes of honest effort before reaching for the answers. The struggle is where the learning happens. Reading a solution and nodding along is not the same as writing one yourself, watching it fail, swearing quietly, fixing it, and watching it succeed.
 

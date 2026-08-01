@@ -95,10 +95,13 @@ does not belong to the set "Web,Database,App" ...
 descriptive error with the valid options listed -- without writing a single `if` statement.
 This is one of the most underused time-savers in PowerShell parameter design.
 
-`[CmdletBinding()]` adds support for `-Verbose`, `-Debug`, `-ErrorAction`, and `-WarningAction`
-automatically. Try calling `Get-ServerInfo -Name 'srv01' -Verbose` -- you don't get verbose
-output because we never called `Write-Verbose`, but the parameter exists and is valid. That's
-the baseline gift of `[CmdletBinding()]`.
+`[CmdletBinding()]` adds support for `-Verbose`, `-Debug`, `-ErrorAction`, and
+`-WarningAction` automatically. Try calling
+`Get-ServerInfo -Name 'srv01' -Verbose` -- you don't get verbose output because
+we never called `Write-Verbose`, but the parameter exists and is valid.
+`-WhatIf` and `-Confirm` are different: they require
+`SupportsShouldProcess` plus a call to `$PSCmdlet.ShouldProcess()` around the
+state-changing operation.
 
 The `[PSCustomObject]` cast from a hashtable is idiomatic PowerShell for lightweight structured
 output. It is faster to type than `New-Object PSObject -Property @{}` and produces the same

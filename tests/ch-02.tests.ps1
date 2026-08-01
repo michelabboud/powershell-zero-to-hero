@@ -1,5 +1,5 @@
 #Requires -Version 7.4
-#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.5' }
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.7.1' }
 
 Describe "Chapter 02 - The Console" {
     It "Ex-1 (Simple): PROFILE variable contains a valid path string" {
@@ -10,9 +10,9 @@ Describe "Chapter 02 - The Console" {
     It "Ex-2 (Normal): profile script sets aliases" {
         function Test-ProfileAliases {
             Set-Alias -Name ll -Value Get-ChildItem -Scope Local
-            Set-Alias -Name np -Value notepad -Scope Local
+            Set-Alias -Name edit -Value Get-Content -Scope Local
             (Get-Alias ll -Scope Local).Definition | Should -Be 'Get-ChildItem'
-            (Get-Alias np -Scope Local).Definition | Should -Be 'notepad'
+            (Get-Alias edit -Scope Local).Definition | Should -Be 'Get-Content'
         }
         Test-ProfileAliases
     }

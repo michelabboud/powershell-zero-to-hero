@@ -11,7 +11,7 @@
 ```powershell
 # Part 1: observe the difference
 'Hello' -eq 'hello'     # True  -- PowerShell string comparison is case-insensitive by default
-'Hello' -ceq 'hello'    # False -- 'H' (0x48) != 'h' (0x68)
+'Hello' -ceq 'hello'    # False -- case differs
 
 # Part 2: the function
 function Test-ExactMatch {
@@ -34,11 +34,21 @@ True
 
 ### What to notice
 
-PowerShell's default string comparison is **culture-aware and case-insensitive**. This is a deliberate design choice for a shell that runs across Windows environments where `Get-ChildItem C:\Windows` and `Get-ChildItem c:\windows` must work identically. The unprefixed operators (`-eq`, `-ne`, `-gt`, etc.) all behave this way.
+PowerShell's default string comparison is **case-insensitive**. String
+comparison operators use .NET's invariant culture for both case-sensitive and
+case-insensitive comparisons, so results don't depend on the machine's current
+locale. The unprefixed operators (`-eq`, `-ne`, `-gt`, and so on) use the
+case-insensitive form.
 
-The `c` prefix forces an **ordinal byte-by-byte comparison** -- `H` (Unicode 0x48) and `h` (0x68) are different characters. The function body is a single expression: `$A -ceq $B` evaluates to a `[bool]` and PowerShell returns the last expression in a function implicitly.
+The `c` prefix makes case significant; it does not switch to an ordinal or
+byte-by-byte algorithm. The function body is a single expression:
+`$A -ceq $B` evaluates to a `[bool]` and writes that value to the success
+output stream.
 
-This is also why you should reach for `-ceq` when comparing passwords, tokens, case-sensitive usernames, or file paths on Linux (where the filesystem itself is case-sensitive).
+Use `-ceq` when exact casing is part of the identifier or protocol. Do not use
+ordinary PowerShell string comparisons to validate passwords, authentication
+tokens, or other secrets; use the relevant authentication API or a
+cryptographic fixed-time comparison designed for that purpose.
 
 ---
 
@@ -77,7 +87,10 @@ Count: 10
 
 Three things happening here worth internalizing:
 
-1. **Range operator `..`** -- `1..20` creates an `[int[]]` array in one token. Under the hood it calls `[System.Linq.Enumerable]::Range`. For small ranges this is instant; for `1..1000000` it still materializes the whole array in memory, so for very large sequences consider `foreach ($i in 1..1000000)` which enumerates lazily.
+1. **Range operator `..`** -- `1..20` creates a materialized array in one
+   expression. A `foreach ($i in 1..1000000)` loop still builds that range
+   first; it is not lazy. For very large sequences, use a counter-based loop
+   such as `for ($i = 1; $i -le 1000000; $i++)`.
 
 2. **`$_` in `Where-Object`** -- `$_` (or its alias `$PSItem`) refers to the current pipeline object. Inside `Where-Object { ... }`, the block must evaluate to a truthy value to pass the object through. Both conditions must be `$true` because `-and` requires both sides.
 
@@ -194,7 +207,7 @@ Exact numbers vary by system state.
 
 Several patterns working together:
 
-1. **Conditional splatting** -- `$splat['Name'] = $Criteria.Name` only runs when `$Criteria.Name` is truthy. `Get-Process @splat` then passes `-Name` only when it was added. Without splatting, you'd need nested `if/else` blocks to build the command call, or `Invoke-Expression` (which is a code smell). Splatting lets you build parameter sets dynamically and cleanly.
+1. **Conditional splatting** -- `$splat['Name'] = $Criteria.Name` only runs when `$Criteria.Name` is truthy. `Get-Process @splat` then passes `-Name` only when it was added. Without splatting, you'd need nested `if/else` blocks to build the command call. Splatting lets you build parameter sets dynamically and cleanly.
 
 2. **`??` inside a script block** -- `$Criteria.MinCPU ?? 0` inside the `Where-Object` block is evaluated *per pipeline object*. This is fine for small process lists, but for performance-sensitive code, compute defaults *before* the pipeline and capture them in outer-scope variables. The block closure captures the outer variables automatically.
 

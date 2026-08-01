@@ -231,13 +231,13 @@ never runs. That's the right behavior when "zero iterations" is a valid outcome.
 
 ```powershell
 # do-while: runs at least once, continues WHILE condition is true
-$input = ''
+$serverNameInput = ''
 do {
-    $input = Read-Host "Enter a server name (or 'done' to finish)"
-    if ($input -ne 'done') {
-        Write-Host "Queued: $input"
+    $serverNameInput = Read-Host "Enter a server name (or 'done' to finish)"
+    if ($serverNameInput -ne 'done') {
+        Write-Host "Queued: $serverNameInput"
     }
-} while ($input -ne 'done')
+} while ($serverNameInput -ne 'done')
 
 # do-until: runs at least once, continues UNTIL condition becomes true
 $attempts = 0
@@ -347,14 +347,14 @@ The `foreach` keyword is fast but disconnected from the pipeline. `ForEach-Objec
 
 ```powershell
 # Pipeline-style: objects flow through
-Get-Service | Where-Object Status -eq 'Running' | ForEach-Object {
-    Write-Host "$($_.Name) is running."
+Get-Process | Where-Object CPU -gt 1 | ForEach-Object {
+    Write-Host "$($_.Name) has used $([math]::Round($_.CPU, 1)) CPU seconds."
 }
 
 # Equivalent foreach keyword (no pipeline, in-memory):
-$runningServices = Get-Service | Where-Object Status -eq 'Running'
-foreach ($svc in $runningServices) {
-    Write-Host "$($svc.Name) is running."
+$activeProcesses = Get-Process | Where-Object CPU -gt 1
+foreach ($process in $activeProcesses) {
+    Write-Host "$($process.Name) has used $([math]::Round($process.CPU, 1)) CPU seconds."
 }
 ```
 
@@ -401,6 +401,11 @@ $results | Format-Table -AutoSize
 
 > **Rina:** In Python this would need `asyncio` or `concurrent.futures`. In Bash you'd
 > background jobs and wait. In PowerShell 7 it's one flag. I still resent it a little.
+
+`-Parallel` uses separate runspaces. Output order isn't guaranteed, and values
+from the caller's scope must be referenced with `$using:`. Use it for work
+large enough to justify the startup and serialization overhead, not for tiny
+in-memory calculations.
 
 ---
 
@@ -534,6 +539,7 @@ Processed 2 server(s): web01, db01
 function Invoke-WithRetry {
     param(
         [scriptblock]$Action,
+        [ValidateRange(1, 10)]
         [int]$MaxRetries = 3
     )
 
@@ -586,7 +592,8 @@ loop constructs: `for` (counter-driven), `foreach` (collection iteration), `whil
 (condition-first), and `do` variants (condition-last, always runs once). `break` exits a
 loop, `continue` skips an iteration, and labeled loops let you escape nested structures
 without hacks. In the pipeline, `ForEach-Object` carries objects through instead of
-breaking the stream -- and `-Parallel` makes it concurrent with one flag.
+breaking the stream -- and `-Parallel` adds runspace-based concurrency when
+the workload justifies its overhead.
 
 Control flow is where scripts stop being sequences of commands and start being programs
 that make decisions. Sam's 200-line `if`/`elseif` chain is now a 10-line `switch`. Max

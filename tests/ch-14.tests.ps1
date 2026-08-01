@@ -1,9 +1,9 @@
 #Requires -Version 7.4
-#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.5' }
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.7.1' }
 
 Describe "Chapter 14 - Remoting & Jobs" {
     It "Ex-1 (Simple): Invoke-Command runs scriptblock locally" {
-        $result = Invoke-Command -ScriptBlock { $env:COMPUTERNAME ?? (hostname) }
+        $result = Invoke-Command -ScriptBlock { [Environment]::MachineName }
         $result | Should -Not -BeNullOrEmpty
     }
 

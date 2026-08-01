@@ -1,9 +1,9 @@
 #Requires -Version 7.4
-#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.5' }
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.7.1' }
 
 Describe "Chapter 16 - Automation Recipes" {
     BeforeAll {
-        $testDir = Join-Path $env:TEMP "ps-ch16-test-$(Get-Random)"
+        $testDir = Join-Path ([System.IO.Path]::GetTempPath()) "ps-ch16-test-$(Get-Random)"
         New-Item $testDir -ItemType Directory -Force | Out-Null
     }
 
@@ -43,16 +43,20 @@ Describe "Chapter 16 - Automation Recipes" {
 
     It "Ex-3 (Advanced): system inventory produces structured report" {
         $inventory = [PSCustomObject]@{
-            Hostname  = (hostname)
+            Hostname  = [Environment]::MachineName
             OS        = $PSVersionTable.OS
             PSVersion = $PSVersionTable.PSVersion.ToString()
             Processes = (Get-Process).Count
-            Services  = (Get-Service).Count
+            Services  = if (Get-Command Get-Service -ErrorAction SilentlyContinue) {
+                (Get-Service).Count
+            } else {
+                $null
+            }
             Uptime    = [math]::Round((Get-Uptime).TotalHours, 1)
             MemoryMB  = [math]::Round((Get-Process | Measure-Object WorkingSet64 -Sum).Sum / 1MB)
         }
         $inventory.Hostname | Should -Not -BeNullOrEmpty
-        $inventory.PSObject.Properties.Count | Should -BeGreaterOrEqual 5
+        @($inventory.PSObject.Properties).Count | Should -BeGreaterOrEqual 5
         $inventory.Processes | Should -BeGreaterThan 0
     }
 

@@ -159,7 +159,7 @@ class RepositoryFixture:
                     '}\n'
                 ),
             )
-        self._write('tests/run-all.ps1', '# Run the chapter tests.\n')
+        self._write('tests/Run-AllTests.ps1', '# Run the chapter tests.\n')
 
         source_inventory = {
             'schemaVersion': 1,

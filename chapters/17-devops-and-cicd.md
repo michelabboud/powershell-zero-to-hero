@@ -18,7 +18,11 @@ Continuous Integration / Continuous Delivery (CI/CD) replaces that with a pipeli
 
 ## Pester: PowerShell's Testing Framework
 
-Pester is the de-facto testing framework for PowerShell. It ships with Windows and is available on all platforms. If you write PowerShell professionally and you're not writing Pester tests, you're one bad refactor away from a very interesting incident report.
+Pester is the de-facto testing framework for PowerShell and is available on
+all PowerShell platforms. Install it explicitly and pin the version used by
+CI; do not rely on the old Pester copy bundled with some Windows PowerShell
+installations. This guide's examples support Pester 5.7.1 and are also
+validated with the current Pester 6.0.1 release.
 
 ### The Anatomy of a Pester Test
 
@@ -121,27 +125,35 @@ Mocking replaces a real command with a fake one for the duration of a test. It's
 
 ```powershell
 Describe "Send-Alert" {
-    It "calls Send-MailMessage when alert level is Critical" {
-        Mock Send-MailMessage { }   # Do nothing, capture the call
+    BeforeAll {
+        function Send-AlertTransport {
+            param([string]$Message)
+            throw 'The real transport must not run in a unit test.'
+        }
 
         function Send-Alert {
             param([string]$Level, [string]$Message)
             if ($Level -eq 'Critical') {
-                Send-MailMessage -To 'ops@example.com' -Subject $Message -From 'alerts@example.com'
+                Send-AlertTransport -Message $Message
             }
         }
+    }
+
+    It "calls the transport when alert level is Critical" {
+        Mock Send-AlertTransport { }   # No network call; capture invocation
 
         Send-Alert -Level 'Critical' -Message 'Disk 95% full'
 
-        Should -Invoke Send-MailMessage -Times 1 -Exactly
+        Should -Invoke Send-AlertTransport -Times 1 -Exactly `
+            -ParameterFilter { $Message -eq 'Disk 95% full' }
     }
 
-    It "does not email for Warning level" {
-        Mock Send-MailMessage { }
+    It "does not call the transport for Warning level" {
+        Mock Send-AlertTransport { }
 
         Send-Alert -Level 'Warning' -Message 'Disk 70% full'
 
-        Should -Invoke Send-MailMessage -Times 0
+        Should -Invoke Send-AlertTransport -Times 0
     }
 }
 ```
@@ -160,14 +172,16 @@ Invoke-Pester ./tests/MyModule.Tests.ps1
 # Run with detailed output
 Invoke-Pester -Output Detailed
 
-# CI mode: exit code reflects pass/fail, produces NUnit XML
+# CI mode: exit code reflects pass/fail
 Invoke-Pester -CI
 
 # Code coverage
 Invoke-Pester -CodeCoverage ./src/MyModule.psm1 -CodeCoverageOutputFile coverage.xml
 ```
 
-The `-CI` switch is the one you use in pipelines. It sets `$LASTEXITCODE` to a non-zero value on failure, which is what build agents look for.
+The `-CI` switch is convenient in pipelines because process exit status
+reflects pass/fail. Configure `TestResult` explicitly when the pipeline must
+publish a known XML file; the workflow later in this chapter shows that form.
 
 ### Code Coverage
 
@@ -188,11 +202,14 @@ A coverage target of 80% is a pragmatic floor. 100% is a vanity metric -- it mea
 
 ## PSScriptAnalyzer: The Linter
 
-PSScriptAnalyzer is to PowerShell what ESLint is to JavaScript: a static analysis tool that catches bad practices before they reach production. It ships with VS Code's PowerShell extension and runs in CI.
+PSScriptAnalyzer is to PowerShell what ESLint is to JavaScript: a static
+analysis tool that catches bad practices before they reach production. The
+PowerShell VS Code extension uses it, and you can install the module directly
+for a reproducible CI environment.
 
 ```powershell
 # Install (if not already present)
-Install-Module PSScriptAnalyzer -Force
+Install-PSResource PSScriptAnalyzer -Scope CurrentUser -TrustRepository
 
 # Analyze a single file
 Invoke-ScriptAnalyzer -Path ./Deploy-Service.ps1
@@ -215,7 +232,7 @@ if ($issues.Count -gt 0) {
 
 | Rule | What It Catches | Why It Matters |
 |---|---|---|
-| `AvoidUsingWriteHost` | `Write-Host` in scripts | Breaks pipeline; use `Write-Output` or `Write-Verbose` |
+| `AvoidUsingWriteHost` | `Write-Host` in scripts | Host-oriented output is usually wrong for reusable commands; return objects or use the appropriate stream |
 | `PSUseDeclaredVarsMoreThanAssignments` | Variables assigned but never used | Probably a typo in the variable name |
 | `AvoidUsingInvokeExpression` | `Invoke-Expression` | Code injection vector |
 | `UseShouldProcessForStateChangingFunctions` | Mutating functions without `-WhatIf` | Makes scripts unauditable |
@@ -243,7 +260,7 @@ The inline suppression attribute is not a "get out of jail free" card. Every sup
 
 ```powershell
 #Requires -Version 7.4
-#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.5' }
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.7.1' }
 #Requires -Modules ActiveDirectory
 #Requires -RunAsAdministrator
 #Requires -PSEdition Core
@@ -289,7 +306,7 @@ A build script is a PowerShell script that orchestrates all the steps to go from
 
 ```powershell
 #Requires -Version 7.4
-#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.5' }
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.7.1' }
 
 [CmdletBinding(SupportsShouldProcess)]
 param(
@@ -333,9 +350,10 @@ if (-not $SkipTests) {
     Write-Step "Running Pester tests"
     $pesterConfig = New-PesterConfiguration
     $pesterConfig.Run.Path = './tests'
-    $pesterConfig.Run.Exit = $true          # exit 1 on failure
+    $pesterConfig.Run.Exit = $false         # let this script inspect the result
+    $pesterConfig.Run.PassThru = $true
     $pesterConfig.Output.Verbosity = 'Minimal'
-    $pesterResult = Invoke-Pester -Configuration $pesterConfig -PassThru
+    $pesterResult = Invoke-Pester -Configuration $pesterConfig
     if ($pesterResult.FailedCount -gt 0) {
         Write-Error "Tests failed: $($pesterResult.FailedCount) failure(s)."
         exit 1
@@ -386,23 +404,28 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest   # pwsh is pre-installed on GitHub-hosted runners
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Install Pester
         shell: pwsh
         run: |
-          Install-Module Pester -MinimumVersion 5.5 -Force -Scope CurrentUser
+          Install-PSResource Pester -Version 6.0.1 -Scope CurrentUser -TrustRepository
 
       - name: Lint
         shell: pwsh
         run: |
-          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          Install-PSResource PSScriptAnalyzer -Scope CurrentUser -TrustRepository
           $issues = Invoke-ScriptAnalyzer -Path ./src -Recurse -Severity Error
           if ($issues.Count -gt 0) {
             $issues | Format-Table -AutoSize
@@ -412,14 +435,22 @@ jobs:
       - name: Test
         shell: pwsh
         run: |
-          Invoke-Pester -CI -Output Detailed
+          $config = New-PesterConfiguration
+          $config.Run.Path = './tests'
+          $config.Run.Exit = $true
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = 'test-results.xml'
+          $config.TestResult.OutputFormat = 'NUnitXml'
+          $config.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $config
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pester-results
-          path: testResults.xml
+          path: test-results.xml
+          if-no-files-found: error
 ```
 
 ### Multi-Platform Matrix
@@ -432,17 +463,13 @@ jobs:
     strategy:
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
-        ps-version: [ '7.4', '7.5' ]
 
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup PowerShell ${{ matrix.ps-version }}
-        uses: bjompen/UpdatePWSHAction@v1
+      - uses: actions/checkout@v7
         with:
-          ReleaseVersion: ${{ matrix.ps-version }}
+          persist-credentials: false
 
       - name: Test
         shell: pwsh
@@ -455,7 +482,7 @@ Module installation on every run adds 30-90 seconds. Cache them:
 
 ```yaml
       - name: Cache PowerShell modules
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.local/share/powershell/Modules
           key: ${{ runner.os }}-psmodules-${{ hashFiles('requirements.psd1') }}
@@ -466,7 +493,7 @@ Module installation on every run adds 30-90 seconds. Cache them:
         shell: pwsh
         run: |
           if (Test-Path ./requirements.psd1) {
-              Install-Module PSDepend -Force -Scope CurrentUser
+              Install-PSResource PSDepend -Scope CurrentUser -TrustRepository
               Invoke-PSDepend ./requirements.psd1 -Force
           }
 ```
@@ -499,8 +526,8 @@ stages:
               targetType: inline
               pwsh: true
               script: |
-                Install-Module Pester -MinimumVersion 5.5 -Force -Scope CurrentUser
-                Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+                Install-PSResource Pester -Version 6.0.1 -Scope CurrentUser -TrustRepository
+                Install-PSResource PSScriptAnalyzer -Scope CurrentUser -TrustRepository
 
           - task: PowerShell@2
             displayName: 'Lint'
@@ -547,7 +574,7 @@ The `PublishTestResults@2` task ingests the NUnit XML and shows pass/fail counts
 | Variables | `${{ env.VAR }}` | `$(VAR)` |
 | Artifacts | `upload-artifact@v4` | `PublishBuildArtifacts@1` |
 | Test results | Third-party action | `PublishTestResults@2` built-in |
-| Free tier | 2000 min/month (public repos: unlimited) | 1800 min/month |
+| Billing and hosted capacity | Consult the current GitHub Actions billing documentation | Consult the current Azure Pipelines pricing documentation |
 
 ---
 
@@ -590,7 +617,7 @@ function Step-ModuleVersion {
 
 ```powershell
 # Publish to PSGallery (requires API key in $env:PSGALLERY_API_KEY)
-function Publish-ModuleToGallery {
+function Publish-ResourceToGallery {
     [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory)]
@@ -603,7 +630,7 @@ function Publish-ModuleToGallery {
         $apiKey = $env:PSGALLERY_API_KEY
         if (-not $apiKey) { throw "PSGALLERY_API_KEY environment variable not set" }
 
-        Publish-Module -Path $ModulePath -Repository $Repository -NuGetApiKey $apiKey
+        Publish-PSResource -Path $ModulePath -Repository $Repository -ApiKey $apiKey
         Write-Host "Published: $(Split-Path $ModulePath -Leaf) -> $Repository" -ForegroundColor Green
     }
 }
@@ -631,7 +658,7 @@ GitHub Actions / Azure DevOps triggers
          |
          +-- Version bump (Step-ModuleVersion -Component Patch)
          |
-         +-- Publish (Publish-Module to PSGallery)
+         +-- Publish (Publish-PSResource to an approved repository)
          |
          +-- Create GitHub Release (gh release create)
 ```
@@ -666,7 +693,7 @@ Build a hashtable that represents a valid GitHub Actions CI workflow for PowerSh
 - Name: `PowerShell CI`
 - Triggers: `push` and `pull_request` on `main`
 - One job named `test` running on `ubuntu-latest`
-- Two steps: `actions/checkout@v4`, then a `pwsh` step that runs `Invoke-Pester -CI`
+- Two steps: `actions/checkout@v7`, then a `pwsh` step that runs `Invoke-Pester -CI`
 
 Validate the structure with assertions: workflow name, runner OS, and step count.
 
@@ -688,7 +715,9 @@ Invoke it with `-WhatIf` and assert the dry-run behavior.
 
 - Pester's `Describe / Context / It / Should` hierarchy maps directly to how you think about behavior. Write tests that read like specifications.
 - `Should -Throw` requires a scriptblock: `{ Risky-Call } | Should -Throw`. Without braces the exception escapes.
-- PSScriptAnalyzer's `AvoidUsingWriteHost` is not pedantic -- `Write-Host` bypasses the pipeline and makes output untestable.
+- PSScriptAnalyzer's `AvoidUsingWriteHost` reminds reusable commands to return
+  data or use the appropriate stream. Since PowerShell 5, `Write-Host` writes
+  to the information stream, but it remains host-oriented output.
 - `#Requires` is a hard contract enforced at parse time. Use it on every script with real prerequisites.
 - `build.ps1` with `Set-StrictMode` and `$ErrorActionPreference = 'Stop'` turns loose scripts into auditable build artifacts.
 - GitHub Actions uses `shell: pwsh`. Azure DevOps uses `pwsh: true` on `PowerShell@2`. Both run cross-platform.

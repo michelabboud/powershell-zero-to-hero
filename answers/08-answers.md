@@ -188,7 +188,7 @@ exports to CSV, re-imports, and verifies row count matches group count.
 ```powershell
 $tempCsv = Join-Path $env:TEMP "pipeline-deep-dive-$(Get-Random).csv"
 
-# Synthetic data (replace with Get-EventLog or Get-WinEvent in live environments)
+# Synthetic data (Get-WinEvent is a Windows-only live source)
 $sourceData = @(
     [PSCustomObject]@{ Source = 'ApplicationA'; Duration = 120 },
     [PSCustomObject]@{ Source = 'ApplicationA'; Duration = 240 },

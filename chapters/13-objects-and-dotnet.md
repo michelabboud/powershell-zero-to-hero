@@ -179,7 +179,7 @@ Static methods belong to the *type*, not to an instance. You call them with `::`
 [math]::PI                         # 3.14159265358979 (a static property)
 
 # System.DateTime static methods
-[datetime]::Now                    # Current date/time (instance property via static)
+[datetime]::Now                    # Current date/time (static property)
 [datetime]::UtcNow                 # UTC now
 [datetime]::Today                  # Today at midnight
 [datetime]::Parse('2024-06-15')    # Parse a date string
@@ -483,9 +483,17 @@ $targets = @(
 )
 
 $results = $targets | ForEach-Object {
-    $sw    = [System.Diagnostics.Stopwatch]::StartNew()
-    $open  = (Test-NetConnection -ComputerName $_.Host -Port $_.Port -WarningAction SilentlyContinue).TcpTestSucceeded
-    $sw.Stop()
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $client = [System.Net.Sockets.TcpClient]::new()
+    try {
+        $connected = $client.ConnectAsync($_.Host, $_.Port).Wait(1000)
+        $open = $connected -and $client.Connected
+    } catch {
+        $open = $false
+    } finally {
+        $client.Dispose()
+        $sw.Stop()
+    }
     [PortResult]::new($_.Host, $_.Port, $open, $sw.ElapsedMilliseconds)
 }
 

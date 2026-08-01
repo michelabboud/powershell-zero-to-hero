@@ -49,8 +49,8 @@ param(
 )
 
 $cutoff = (Get-Date).AddDays(-$DaysOld)
-$candidates = Get-ChildItem -Path $LogDir -File -Recurse -ErrorAction SilentlyContinue |
-    Where-Object { $_.LastWriteTime -lt $cutoff }
+$candidates = @(Get-ChildItem -Path $LogDir -File -Recurse -ErrorAction SilentlyContinue |
+    Where-Object { $_.LastWriteTime -lt $cutoff })
 
 if ($candidates.Count -eq 0) {
     Write-Host "No files older than $DaysOld days found in $LogDir"
@@ -121,13 +121,16 @@ $stamp     = Get-Date -Format 'yyyy-MM-dd_HHmmss'
 $backupDir = Join-Path $BackupRoot $stamp
 
 Write-Host "Backing up '$SourceDir' -> '$backupDir'"
-Copy-Item -Path $SourceDir -Destination $backupDir -Recurse -Force
-Write-Host "Backup complete."
+if ($PSCmdlet.ShouldProcess($backupDir, "Copy '$SourceDir'")) {
+    New-Item -Path $BackupRoot -ItemType Directory -Force | Out-Null
+    Copy-Item -Path $SourceDir -Destination $backupDir -Recurse -Force
+    Write-Host "Backup complete."
+}
 
 # --- Prune old backups ---
 $cutoff = (Get-Date).AddDays(-$RetainDays)
-$old = Get-ChildItem -Path $BackupRoot -Directory |
-    Where-Object { $_.CreationTime -lt $cutoff }
+$old = @(Get-ChildItem -Path $BackupRoot -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.LastWriteTime -lt $cutoff })
 
 if ($old.Count -gt 0) {
     Write-Host "Pruning $($old.Count) backup(s) older than $RetainDays days..."
@@ -157,10 +160,12 @@ Get-Help .\Invoke-Backup.ps1 -Examples
 ```
 
 `Set-StrictMode -Version Latest` catches use of uninitialized variables and
-other sloppy habits at script start. Pair it with `$ErrorActionPreference =
-'Stop'` so any cmdlet failure becomes a terminating error rather than a
-warning you might miss. These two lines at the top of every production script
-are the lowest-cost reliability improvement available.
+other sloppy habits at script start. Pairing it with
+`$ErrorActionPreference = 'Stop'` is a strong default for automation because
+cmdlet failures become terminating errors. Native executables still report
+failure through `$LASTEXITCODE` unless you deliberately enable
+`$PSNativeCommandUseErrorActionPreference`; choose and test that policy for
+each script.
 
 ---
 
@@ -170,6 +175,10 @@ One of the most-requested scripts in any IT team: "give me a snapshot of
 what's running on this box." Useful for baseline documentation, incident
 response, and compliance audits.
 
+This recipe is **Windows-only**: the `Win32_*` CIM classes and `Get-Service`
+calls shown here rely on Windows management providers. The exercises later in
+the chapter show how to keep the basic inventory object portable.
+
 ![inventory-report](assets/images/ch-16-inventory-report.png)
 
 ```powershell
@@ -177,11 +186,11 @@ response, and compliance audits.
 .SYNOPSIS
     Generate an HTML system inventory report.
 .PARAMETER OutputPath
-    Where to write the HTML file. Defaults to Desktop.
+    Where to write the HTML file. Defaults to the current directory.
 #>
 param(
-    [string]$OutputPath = (Join-Path ([Environment]::GetFolderPath('Desktop'))
-        "inventory-$(hostname)-$(Get-Date -Format yyyyMMdd).html")
+    [string]$OutputPath = (Join-Path (Get-Location)
+        "inventory-$([Environment]::MachineName)-$(Get-Date -Format yyyyMMdd).html")
 )
 
 $ErrorActionPreference = 'Stop'
@@ -199,7 +208,7 @@ $topProcs = Get-Process | Sort-Object WorkingSet64 -Descending |
                     Id
 
 $inventory = [PSCustomObject]@{
-    Hostname    = $env:COMPUTERNAME
+    Hostname    = [Environment]::MachineName
     OS          = $os.Caption
     OSBuild     = $os.BuildNumber
     Architecture= $os.OSArchitecture
@@ -248,7 +257,7 @@ $html = ConvertTo-Html -Title "Inventory: $($inventory.Hostname)" `
 
 Set-Content -Path $OutputPath -Value $html -Encoding UTF8
 Write-Host "Report written to: $OutputPath"
-Invoke-Item $OutputPath   # open in browser
+# Optional on an interactive desktop: Invoke-Item $OutputPath
 ```
 
 `ConvertTo-Html -Fragment` is the workhorse here: it renders any object
@@ -263,6 +272,10 @@ actually read.
 
 A script that runs manually is a ceremony. A script in a scheduled task is
 infrastructure.
+
+This recipe is **Windows-only**. On Linux, use a systemd timer or cron; on
+macOS, use `launchd`. Their scheduling and security models are different, so
+translate the intent rather than copying these cmdlets.
 
 ```powershell
 # Register a daily cleanup task (run as current user)
@@ -313,40 +326,35 @@ in Task Scheduler's tree view. It costs nothing and saves confusion during audit
 
 ---
 
-## Recipe 5: Email Alerts (Pattern)
+## Recipe 5: Alert Transport Adapter
 
-Sending email from a script turns reactive monitoring into proactive
-alerting. The pattern is the same whether you're checking disk space,
-service health, or backup completion.
+Sending an alert turns reactive monitoring into proactive alerting. Keep the
+monitor independent of the delivery provider by passing a transport adapter.
+That makes the core behavior testable and lets one environment use Microsoft
+Graph while another uses a ticketing or webhook API.
 
 ```powershell
 function Send-Alert {
     <#
     .SYNOPSIS
-        Send a plain-text alert email via SMTP.
+        Build an alert and pass it to a caller-supplied transport.
     #>
     param(
         [Parameter(Mandatory)][string]$Subject,
         [Parameter(Mandatory)][string]$Body,
-        [string]$To       = 'ops-alerts@company.com',
-        [string]$From     = 'monitoring@company.com',
-        [string]$SmtpHost = 'smtp.company.com',
-        [int]   $SmtpPort = 587,
-        [switch]$UseSsl
+        [Parameter(Mandatory)][scriptblock]$Transport,
+        [string]$To = 'ops-alerts@company.com'
     )
 
-    $mailParams = @{
-        To         = $To
-        From       = $From
-        Subject    = "[ALERT] $Subject"
-        Body       = $Body
-        SmtpServer = $SmtpHost
-        Port       = $SmtpPort
-        UseSsl     = $UseSsl.IsPresent
+    $alert = [PSCustomObject]@{
+        To        = $To
+        Subject   = "[ALERT] $Subject"
+        Body      = $Body
+        CreatedAt = Get-Date
     }
 
     try {
-        Send-MailMessage @mailParams
+        & $Transport $alert
         Write-Verbose "Alert sent: $Subject"
     } catch {
         Write-Warning "Failed to send alert '$Subject': $_"
@@ -354,13 +362,33 @@ function Send-Alert {
     }
 }
 
-# Usage pattern: disk space check with alert
+# Example Microsoft Graph adapter. Connect-MgGraph must already be configured
+# with the least privilege your identity needs (normally Mail.Send). Prefer a
+# managed identity or certificate-based app identity over a stored secret.
+$graphTransport = {
+    param($Alert)
+
+    $request = @{
+        message = @{
+            subject = $Alert.Subject
+            body = @{ contentType = 'Text'; content = $Alert.Body }
+            toRecipients = @(
+                @{ emailAddress = @{ address = $Alert.To } }
+            )
+        }
+        saveToSentItems = $false
+    }
+
+    Send-MgUserMail -UserId 'monitoring@company.com' -BodyParameter $request
+}
+
+# Windows-only usage example: disk space check with alert
 $disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
 $freePercent = [math]::Round($disk.FreeSpace / $disk.Size * 100, 1)
 
 if ($freePercent -lt 15) {
     $body = @"
-WARNING: Low disk space on $env:COMPUTERNAME
+WARNING: Low disk space on $([Environment]::MachineName)
 
 Drive:      C:\
 Free Space: $([math]::Round($disk.FreeSpace/1GB, 1)) GB
@@ -370,16 +398,17 @@ Free:       $freePercent%
 This alert was generated by: $PSCommandPath
 Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
 "@
-    Send-Alert -Subject "Low disk on $env:COMPUTERNAME (C: $freePercent% free)" -Body $body
+    Send-Alert -Subject "Low disk on $([Environment]::MachineName) (C: $freePercent% free)" `
+        -Body $body -Transport $graphTransport
 }
 ```
 
-`Send-MailMessage` is deprecated in PS7 (Microsoft recommends the community
-`Send-MgMail` module for Microsoft 365, or the `MailKit` .NET library for
-modern SMTP). The pattern above works fine for traditional on-premises SMTP
-relays, which still exist in the majority of enterprise environments. Wrap
-the actual transport in your `Send-Alert` function and swap it out when you
-migrate -- the rest of your scripts don't change.
+Do not build new automation around `Send-MailMessage`: Microsoft marks it
+obsolete and says it does not guarantee secure SMTP connections. Microsoft
+365 automation can use the supported Microsoft Graph
+`Send-MgUserMail` cmdlet. Other providers need their own supported SDK or
+HTTPS API adapter. Authentication belongs outside the script in the platform's
+secret or workload-identity system.
 
 ---
 
@@ -387,6 +416,10 @@ migrate -- the rest of your scripts don't change.
 
 Alerts are reactive. Drift detection is proactive: you define what "healthy"
 looks like (the baseline), and your monitor flags deviations automatically.
+
+This concrete implementation is **Windows-only** because `Get-Service` is
+currently supported only on Windows. The baseline-comparison function in the
+answer section is platform-neutral when supplied with ordinary objects.
 
 ```powershell
 <#
@@ -444,7 +477,7 @@ $baseline = Get-Content $BaselinePath -Raw | ConvertFrom-Json
 $current  = Get-ServiceSnapshot
 
 # --- Detect drift ---
-$drift = foreach ($expected in $baseline) {
+$drift = @(foreach ($expected in $baseline) {
     $actual = $current | Where-Object Name -eq $expected.Name
     if (-not $actual) {
         [PSCustomObject]@{
@@ -461,7 +494,7 @@ $drift = foreach ($expected in $baseline) {
             Actual    = $actual.Status
         }
     }
-}
+})
 
 if ($drift.Count -eq 0) {
     Write-Host "[OK] All $($baseline.Count) monitored services match baseline."
@@ -476,7 +509,8 @@ if ($drift.Count -ge $AlertThreshold) {
         ForEach-Object { "  $($_.Name): expected=$($_.Expected), actual=$($_.Actual)" } |
         Out-String
 
-    # Send-Alert -Subject "Service drift on $env:COMPUTERNAME" -Body $alertBody
+    # Send-Alert -Subject "Service drift on $([Environment]::MachineName)" `
+    #     -Body $alertBody -Transport $configuredTransport
     Write-Host "Alert body (would be emailed):`n$alertBody"
 }
 ```
@@ -548,7 +582,7 @@ Beyond the help block, apply these three rules to every script you write:
 ```powershell
 # Standard script preamble (add to every production script)
 $scriptStart = Get-Date
-Write-Verbose "[$($MyInvocation.MyCommand.Name)] Started by $env:USERNAME on $env:COMPUTERNAME"
+Write-Verbose "[$($MyInvocation.MyCommand.Name)] Started by $([Environment]::UserName) on $([Environment]::MachineName)"
 Write-Verbose "[$($MyInvocation.MyCommand.Name)] Parameters: $($PSBoundParameters | ConvertTo-Json -Compress)"
 
 # ... script body ...
@@ -573,8 +607,10 @@ it gets removed while a fresh file in the same directory is left alone.
 Write a backup script that:
 - Copies a source directory into a date-stamped subfolder under a backup root
   (folder name format: `yyyy-MM-dd_HHmmss`)
-- After copying, prunes any backup folders whose `CreationTime` is older than
-  a configurable retention period (default: 14 days)
+- After copying, prunes date-stamped backup folders whose age, according to
+  the script's documented retention timestamp, exceeds a configurable period
+  (default: 14 days). The recipe uses `LastWriteTime`; a production backup
+  system can instead parse the timestamp in its controlled folder names.
 
 Verify that the backup folder is created and that the files it contains
 match the source.
@@ -585,7 +621,8 @@ Build a script that collects the following inventory data and produces a
 structured `PSCustomObject`:
 - Hostname, OS, PowerShell version
 - Total running process count
-- Total running service count
+- Total running service count on Windows; use `$null` where `Get-Service` is
+  unavailable
 - System uptime in hours (rounded to 1 decimal)
 - Total working set of all processes in MB
 
@@ -605,15 +642,16 @@ with the correct expected and actual values.
 
 ## Key Takeaways
 
-- `SupportsShouldProcess` + `-WhatIf` is mandatory for any script that deletes
-  or modifies files. It costs one line and saves your job.
-- `Set-StrictMode -Version Latest` + `$ErrorActionPreference = 'Stop'` at the
-  top of every production script. No exceptions.
+- State-changing advanced functions and scripts should implement
+  `SupportsShouldProcess` and gate **every** mutation with `ShouldProcess`.
+- `Set-StrictMode -Version Latest` and `$ErrorActionPreference = 'Stop'` are
+  strong automation defaults, but native command exit handling and intentional
+  recovery paths require an explicit, tested policy.
 - Date-stamp your backup folders (`yyyy-MM-dd_HHmmss`). Prune with
-  `CreationTime -lt $cutoff`. Retention policy is not optional.
+  a timestamp whose semantics you control. Retention policy is not optional.
 - `ConvertTo-Html -Fragment` turns any object collection into an HTML table.
   Combine fragments for full reports with zero HTML knowledge required.
-- `Get-Service` + `ConvertTo-Json` gives you a baseline. Compare against it
+- On Windows, `Get-Service` + `ConvertTo-Json` gives you a baseline. Compare against it
   with `Where-Object` to detect drift. This pattern scales to disks, firewall
   rules, installed software, registry keys -- anything you can enumerate.
 - Comment-based help is not documentation overhead. It is the minimum viable

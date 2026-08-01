@@ -774,6 +774,7 @@ else:
             self.assertIn('Title:           PowerShell: Zero to Hero', info)
             self.assertIn('Author:          Michel Abboud', info)
             self.assertIn('Created by Visual Forge', text)
+            self.assertIn('Contents', text)
             self.assertIn('TEMPLATE CONTRACT MARKER', text)
 
     def test_check_preserves_seeded_managed_file_bytes(self) -> None:

@@ -1,5 +1,5 @@
 #Requires -Version 7.4
-#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.5' }
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.7.1' }
 
 Describe "Chapter 03 - Commands & Cmdlets" {
     It "Ex-1 (Simple): Get-Help returns help for Get-ChildItem" {
@@ -22,11 +22,17 @@ Describe "Chapter 03 - Commands & Cmdlets" {
     It "Ex-4 (Extreme): system health summary has 5+ data points" {
         $health = [PSCustomObject]@{
             ProcessCount  = (Get-Process).Count
-            ServiceCount  = (Get-Service).Count
+            ThreadCount   = (
+                Get-Process |
+                    ForEach-Object { $_.Threads.Count } |
+                    Measure-Object -Sum
+            ).Sum
             Uptime        = (Get-Uptime).TotalHours
             UsedMemoryMB  = [math]::Round((Get-Process | Measure-Object WorkingSet64 -Sum).Sum / 1MB)
-            TempFileCount = (Get-ChildItem $env:TEMP -ErrorAction SilentlyContinue).Count
+            TempFileCount = (
+                Get-ChildItem ([System.IO.Path]::GetTempPath()) -ErrorAction SilentlyContinue
+            ).Count
         }
-        $health.PSObject.Properties.Count | Should -BeGreaterOrEqual 5
+        @($health.PSObject.Properties).Count | Should -BeGreaterOrEqual 5
     }
 }

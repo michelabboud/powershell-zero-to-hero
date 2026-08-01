@@ -122,7 +122,7 @@ $servers = @('web01', 'db01', 'app01')
 "We are managing $($servers.Count) servers in this environment."
 
 # 2. Here-string with interpolation
-$hostname = $env:COMPUTERNAME
+$hostname = [Environment]::MachineName
 $report = @"
 === Daily Status Report ===
 Host       : $hostname
@@ -148,7 +148,7 @@ We are managing 3 servers in this environment.
 === Daily Status Report ===
 Host       : WORKSTATION01
 Generated  : 2026-03-17 09:42
-PS Version : 7.4.6
+PS Version : 7.6.4
 User       : sam
 
 Tool: PowerShell   Version: 7

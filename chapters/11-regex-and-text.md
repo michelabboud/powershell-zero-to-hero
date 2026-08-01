@@ -31,12 +31,12 @@ that holds the matched text and any capture groups.
 
 ```powershell
 # Basic match -- does the string contain this pattern?
-'PowerShell 7.4.1' -match '\d+\.\d+'
+'PowerShell 7.6.4' -match '\d+\.\d+'
 # True
 
 # After a successful match, $Matches is populated
 $Matches[0]
-# 7.4
+# 7.6
 
 # $Matches[0] is always the full match
 # $Matches[1], [2], ... are numbered capture groups
@@ -51,8 +51,9 @@ A few things worth burning into memory:
 
 - `-match` is **case-insensitive by default**. Use `-cmatch` for
   case-sensitive matching.
-- `$Matches` is only valid **after the most recent `-match`** in the current
-  scope. It gets overwritten on every call.
+- `$Matches` is updated by the most recent **successful scalar** `-match` in
+  the current scope. A failed match leaves the previous value intact, so use
+  it only inside the branch guarded by that match.
 - `-match` tests for **containment**, not full-string equality. The pattern
   `'\d+'` matches `'abc123def'` because the digits appear somewhere in it.
   Anchor with `^` and `$` when you need full-string validation.
@@ -147,9 +148,11 @@ $logs -replace '\.prod\.example\.com', '.staging.example.com'
 # Server: app01.staging.example.com
 ```
 
-When you apply a string operator like `-replace` or `-match` to an array,
-PowerShell runs it against each element and returns a new array. This is not
-magic -- it's the same scalar operator applied via pipeline semantics.
+String operators also accept collections, but their return contracts differ:
+`-replace` returns every transformed element, while collection input to
+`-match` returns only the elements that matched. Collection-mode `-match`
+doesn't populate `$Matches`; use a scalar match inside a loop when you need
+capture groups.
 
 ---
 
@@ -433,7 +436,8 @@ the assigned severity.
 - `$Matches[0]` is always the full match; `$Matches[1]` onward are capture groups.
 - Named captures (`(?<name>pattern)`) turn `$Matches.name` into self-documenting code.
 - `-replace` supports back-references (`$1`, `${name}`) in the replacement string.
-- `-match` and `-replace` are vectorized: apply them to an array and they run per element.
+- `-replace` transforms collection elements; collection-mode `-match` filters
+  matching elements and doesn't populate `$Matches`.
 - `Select-String` returns `MatchInfo` objects with file, line number, and match context -- not raw strings.
 - `[regex]` compiles patterns for reuse and unlocks scriptblock replacements and `Matches()` (all matches, not just first).
 - Lookaheads/lookbehinds match positions without consuming characters -- use them for context-sensitive substitution.

@@ -11,17 +11,17 @@ cry for help.
 
 You've been using the pipeline since Chapter 03. Now we go under the hood.
 
-When you write `Get-Process | Where-Object { $_.CPU -gt 10 }`, PowerShell does
-something that surprises most people coming from Bash: it does **not** wait for
-`Get-Process` to finish before starting `Where-Object`. The two cmdlets run
-**concurrently**, connected by an object queue. As soon as `Get-Process`
-produces the first process object, it drops it on the queue and `Where-Object`
-picks it up immediately.
+When you write `Get-Process | Where-Object { $_.CPU -gt 10 }`, PowerShell can
+pass each emitted object to the next command without first building a complete
+intermediate collection. The commands are not necessarily running in parallel;
+the pipeline engine normally coordinates them in the same runspace as upstream
+commands produce output and downstream commands process it.
 
 This is called **streaming execution**, and it has two practical consequences:
 
-1. **Memory efficiency** -- you never have all objects in RAM at once (unless
-   you force it by assigning to a variable).
+1. **Potential memory efficiency** -- streaming stages can avoid holding every
+   object at once. Some source commands and blocking stages such as
+   `Sort-Object` and `Group-Object` still need to collect input.
 2. **Early termination** -- `Select-Object -First 5` can stop the pipeline the
    moment it has enough data. `Get-Process` never needs to enumerate everything.
 
@@ -74,10 +74,10 @@ you need `and`, `or`, or any expression, you go back to the script block form.
 Get-Process | Where-Object { $_.WorkingSet64 -gt 100MB -and $_.CPU -gt 10 }
 
 # String match with -like
-Get-Service | Where-Object { $_.DisplayName -like '*Windows*' }
+Get-Process | Where-Object { $_.Name -like '*shell*' }
 
-# Null check -- filter out empty properties
-Get-Process | Where-Object { $null -ne $_.MainWindowTitle }
+# Null/empty check -- keep processes with a window title
+Get-Process | Where-Object { -not [string]::IsNullOrEmpty($_.MainWindowTitle) }
 ```
 
 > **Performance rule: filter left.** Put `Where-Object` as early in the
@@ -94,9 +94,9 @@ pipeline. Unlike assigning to a variable and using a `foreach` loop,
 `ForEach-Object` maintains streaming -- it processes one object at a time.
 
 ```powershell
-# Basic usage: restart every stopped service (careful with this one)
-Get-Service | Where-Object Status -eq 'Stopped' | ForEach-Object {
-    Write-Host "Would restart: $($_.Name)"
+# Basic usage: report larger processes without changing system state
+Get-Process | Where-Object WorkingSet64 -gt 100MB | ForEach-Object {
+    Write-Host "$($_.Name): $([math]::Round($_.WorkingSet64 / 1MB, 1)) MB"
 }
 
 # Alias: %
@@ -138,7 +138,7 @@ the properties you named.
 Get-Process | Sort-Object CPU -Descending | Select-Object -First 10
 
 # Last N objects
-Get-EventLog -LogName System -Newest 100 | Select-Object -Last 5
+Get-ChildItem -File | Sort-Object LastWriteTime | Select-Object -Last 5
 
 # Skip the first N, take the rest
 Get-ChildItem | Select-Object -Skip 10
@@ -217,8 +217,8 @@ Each group becomes a `GroupInfo` object with a `Name`, a `Count`, and a `Group`
 array containing the original objects.
 
 ```powershell
-# Group services by status
-Get-Service | Group-Object Status
+# Group processes by whether they are responding
+Get-Process | Group-Object Responding
 
 # Group processes by their first letter (using a script block)
 Get-Process | Group-Object { $_.Name.Substring(0,1).ToUpper() }
@@ -227,9 +227,9 @@ Get-Process | Group-Object { $_.Name.Substring(0,1).ToUpper() }
 Get-ChildItem -File | Group-Object Extension | Sort-Object Count -Descending
 
 # Access the grouped objects themselves
-$byStatus = Get-Service | Group-Object Status
-$byStatus | ForEach-Object {
-    "Status: $($_.Name) | Count: $($_.Count)"
+$byState = Get-Process | Group-Object Responding
+$byState | ForEach-Object {
+    "Responding: $($_.Name) | Count: $($_.Count)"
 }
 ```
 
@@ -302,7 +302,7 @@ Get-Process |
 # $allProcs now holds ALL processes; the pipeline continues with filtered ones
 "Total processes: $($allProcs.Count)"
 
-# Capture to a file (appends one object per line as text)
+# Capture to a file (overwrites by default; use -Append to append)
 Get-Process | Tee-Object -FilePath ./process-snapshot.txt | Select-Object -First 5
 ```
 
@@ -310,11 +310,11 @@ Get-Process | Tee-Object -FilePath ./process-snapshot.txt | Select-Object -First
 stages to capture the intermediate state:
 
 ```powershell
-Get-Service |
+Get-Process |
     Tee-Object -Variable beforeFilter |
-    Where-Object Status -eq 'Running' |
+    Where-Object WorkingSet64 -gt 100MB |
     Tee-Object -Variable afterFilter |
-    Sort-Object DisplayName
+    Sort-Object Name
 ```
 
 Now `$beforeFilter` and `$afterFilter` both exist after the pipeline completes,
@@ -330,16 +330,17 @@ Every object that doesn't pass a filter saves all downstream cmdlets from
 processing it. The earlier you filter, the less work everything else does.
 
 ```powershell
-# Slow: fetches all 10,000 events, THEN filters
-Get-EventLog -LogName Application -Newest 10000 | Where-Object EntryType -eq 'Error'
+# Slower: enumerates every item, THEN filters by name
+Get-ChildItem -Path . -Recurse -File | Where-Object Name -like '*.log'
 
-# Fast: filters at the source, only fetches what you need
-Get-EventLog -LogName Application -Newest 10000 -EntryType Error
+# Better: asks the filesystem provider to apply its native filter
+Get-ChildItem -Path . -Recurse -File -Filter '*.log'
 ```
 
-When a cmdlet has native parameters that do the filtering (like `-EntryType`,
-`-Filter`, `-Include`, `-Exclude`), use those instead of `Where-Object`. The
-cmdlet does the filtering before objects even enter the pipeline.
+When a cmdlet has native parameters that perform the same filtering (for
+example `-Filter`), prefer them to `Where-Object`. The source can reduce the
+number of objects entering the pipeline. Confirm that the native parameter has
+the same semantics before replacing a richer script-block condition.
 
 ### Rule 2: Format Right
 
@@ -357,8 +358,9 @@ Get-Process | Export-Csv ./out.csv  # Save real data first
 Get-Process | Format-Table Name, CPU  # Then display if you want to see it
 ```
 
-The rule is simple: `Format-*` is always the last thing in the pipeline.
-Always. No exceptions.
+The rule is simple: `Format-*` is the last **data transformation**. It may be
+followed by a display sink such as `Out-Host`, `Out-String`, or `Out-File`, but
+not by data exporters or object-processing cmdlets.
 
 ---
 
@@ -433,11 +435,13 @@ optional `$tempCsv` for the output path) that:
 
 ## Key Takeaways
 
-- The pipeline is **streaming** -- objects flow through concurrently, not in
-  batches. Early termination and memory efficiency follow from this.
+- Pipeline stages can **stream** objects without materializing every
+  intermediate result. That is distinct from parallel execution, and blocking
+  commands may still buffer their input.
 - `$_` / `$PSItem` is the current object inside any pipeline script block.
 - **Filter left with `Where-Object`**, or better: use source cmdlet parameters.
-- **Format right** -- `Format-*` cmdlets always go last or not at all.
+- **Format right** -- `Format-*` cmdlets come after all object processing and
+  may only feed display-oriented `Out-*` sinks.
 - `Where-Object` gates objects; `ForEach-Object` transforms them; `Select-Object`
   shapes them; `Sort-Object` orders them; `Group-Object` buckets them;
   `Measure-Object` aggregates them; `Tee-Object` taps them.

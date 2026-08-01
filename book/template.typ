@@ -52,6 +52,10 @@
     ]
   ]
 
+  page()[
+    #outline(title: [Contents], depth: 2, indent: auto)
+  ]
+
   body
 
   page(margin: 0pt, numbering: none)[

@@ -1,5 +1,5 @@
 #Requires -Version 7.4
-#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.5' }
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.7.1' }
 
 Describe "Chapter 10 - Error Handling" {
     It "Ex-1 (Simple): try/catch handles divide-by-zero" {
@@ -40,7 +40,7 @@ Describe "Chapter 10 - Error Handling" {
     }
 
     It "Ex-4 (Extreme): structured error logging to JSON" {
-        $logPath = Join-Path $env:TEMP "ps-error-log-$(Get-Random).json"
+        $logPath = Join-Path ([System.IO.Path]::GetTempPath()) "ps-error-log-$(Get-Random).json"
         try {
             function Write-ErrorLog {
                 param([System.Management.Automation.ErrorRecord]$ErrorRecord, [string]$LogPath)

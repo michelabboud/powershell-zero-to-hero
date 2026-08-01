@@ -410,7 +410,7 @@ building it, write a validation block that:
 
 - Confirms the top-level key count equals 3
 - Confirms a nested integer value is of type `[int]`
-- Confirms a nested integer value is of type `[int]`
+- Confirms a nested Boolean value is of type `[bool]`
 - Accesses a third-level value if you have one (bonus depth)
 
 ---

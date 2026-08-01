@@ -11,12 +11,9 @@ not null or empty.
 ### Solution
 
 ```powershell
-# Invoke-Command without -ComputerName runs the block in a child runspace
-# on the local machine -- still useful for testing remoting mechanics and
-# demonstrating the $using: scope without needing a real remote target.
+# Invoke-Command without a remote target invokes the block locally.
 $result = Invoke-Command -ScriptBlock {
-    # $env:COMPUTERNAME is available on Windows; hostname works cross-platform
-    $env:COMPUTERNAME ?? (hostname)
+    [Environment]::MachineName
 }
 
 $result
@@ -27,14 +24,15 @@ if ([string]::IsNullOrEmpty($result)) {
 Write-Host "Local hostname: $result"
 ```
 
-### Stretch goal: `$using:` injection
+### Stretch goal: explicit arguments
 
 ```powershell
-$greeting = "Hello from"
+$greeting = 'Hello from'
 
 $result = Invoke-Command -ScriptBlock {
-    "$using:greeting $($env:COMPUTERNAME ?? (hostname))"
-}
+    param($Prefix)
+    "$Prefix $([Environment]::MachineName)"
+} -ArgumentList $greeting
 
 $result  # "Hello from MYPC" or similar
 ```
@@ -50,19 +48,11 @@ Local hostname: MYPC
 
 ### What to notice
 
-Running `Invoke-Command` without `-ComputerName` looks trivial, but it is
-doing something non-obvious: it executes the ScriptBlock in a *child
-runspace*, not in your current session. This means the child has its own
-variable scope, its own module imports, and its own execution context. The
-`$using:` modifier is how you punch through that boundary. If you try
-`$greeting` directly inside the ScriptBlock (without `$using:`), it resolves
-to `$null` rather than your local value -- no error, just silence. That
-silent failure is one of the most common remoting bugs you will encounter.
-Always test variable injection explicitly.
-
-The null-coalescing operator `??` (`$env:COMPUTERNAME ?? (hostname)`) is a
-clean cross-platform guard: on Windows `$env:COMPUTERNAME` is populated; on
-Linux/macOS it may not be, so `hostname` provides the fallback.
+This local parameter set is useful for testing scriptblock output, but it does
+not test authentication, serialization, or a remoting transport. `$using:` is
+valid for remote `Invoke-Command` calls; for local invocation, use ordinary
+parameters with `-ArgumentList`. `[Environment]::MachineName` is a
+cross-platform hostname API.
 
 ---
 
@@ -163,8 +153,9 @@ Results: 2, 4, 6, 8, 10
    not inherit your `$PSDefaultParameterValues`, your loaded modules, your
    imported functions, or your `$env:` customisations. If your job needs a
    module, `Import-Module` it inside the ScriptBlock. If it needs an
-   environment variable, either pass it with `$using:` or set it explicitly
-   inside the block.
+   value from the caller, pass it with `$using:` or as an argument. A child
+   process inherits a snapshot of environment variables at startup, not later
+   changes to the parent process.
 
 4. **`Wait-Job -Timeout` returns the job object** (or `$null` if it times out).
    Check `.State` after waiting; do not assume completion means success.
@@ -253,13 +244,13 @@ Distinct threads used: 3
 
 3. **`$_` is still the current item.** The pipeline semantics work exactly as
    in a normal `ForEach-Object`; `-Parallel` just adds concurrency. Assign
-   `$_ ` to a named variable inside the block (`$n = $_`) before any
-   `Start-Sleep` or async work to avoid a subtle race where `$_` is reassigned
-   by the next iteration before your closure captures it.
+   `$_` to a named variable (`$n = $_`) when it improves readability. Each
+   iteration has its own runspace context, so a later iteration doesn't race
+   to overwrite the current iteration's `$_`.
 
 4. **Thread vs process.** Unlike `Start-Job`, `ForEach-Object -Parallel` runs
    in threads of the *current process*. No child process startup cost. This
-   makes it 10-100x faster to start for small workloads, but it also means a
+   makes startup cheaper for small workloads, but it also means a
    catastrophically-behaved ScriptBlock (one that crashes the runtime, not just
    throws an error) can affect your session. For untrusted code, use
    `Start-Job` instead.
@@ -381,17 +372,15 @@ tasks is typically 1.8-2.5x.)
 
 ### What to notice
 
-1. **try/catch per task is non-negotiable in fan-outs.** Without it, one
-   failing task throws a terminating error that stops the entire parallel
-   block -- you lose all results, not just the one that failed. With
-   try/catch, you get structured failure objects mixed with success objects,
-   and you decide what to do about them in the aggregation pass.
+1. **Use try/catch per task in fan-outs.** An unhandled iteration error is
+   written as an error and is difficult to correlate consistently with the
+   corresponding target. With try/catch, you get structured failure objects
+   mixed with success objects and can decide what to do in aggregation.
 
-2. **`-ThrottleLimit 2` on 5 tasks means batches of 2 + 2 + 1.** The wall
-   clock time is roughly `ceil(n / throttle) * average_duration`. That
-   explains the ~1.9x speedup rather than 5x: you can't parallelize beyond
-   the throttle limit. Use this formula to set realistic expectations when
-   estimating batch job durations.
+2. **`-ThrottleLimit 2` allows at most two active iterations.** New work starts
+   whenever a slot becomes free, so variable-duration tasks aren't rigid
+   batches. The wall time depends on how durations are distributed across the
+   two runspaces; measure it rather than relying on a batch formula.
 
 3. **Structured results make aggregation composable.** Every object -- success
    or failure -- has the same shape: `Target`, `Status`, `Duration`. This lets

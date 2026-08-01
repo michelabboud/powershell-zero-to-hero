@@ -12,7 +12,7 @@ their `Name` and `SamAccountName`. Use a mock in tests — no real AD required.
 ```powershell
 $searchBase = 'OU=Users,DC=corp,DC=local'
 
-$users = Get-ADUser -Filter * -SearchBase $searchBase
+$users = Get-ADUser -Filter { Enabled -eq $true } -SearchBase $searchBase
 
 foreach ($user in $users) {
     [PSCustomObject]@{
@@ -33,7 +33,8 @@ Jane Doe    jdoe
 
 ### What to notice
 
-`Get-ADUser -Filter *` without `-SearchBase` would scan the entire domain.
+`Get-ADUser -Filter { Enabled -eq $true }` pushes the enabled-state predicate
+to the directory server. Omitting `-SearchBase` would scan the entire domain.
 Adding `-SearchBase` scopes the LDAP query server-side before any results
 travel over the wire — much faster in large environments. The mock in the
 test file returns a fixed two-element array so the test never touches a
@@ -53,7 +54,7 @@ gracefully.
 
 ```powershell
 $allUsers    = Get-ADUser -Filter *
-$disabled    = $allUsers | Where-Object { -not $_.Enabled }
+$disabled    = @($allUsers | Where-Object { -not $_.Enabled })
 $count       = $disabled.Count
 
 if ($count -eq 0) {
@@ -82,8 +83,8 @@ approach in this exercise is intentional — it demonstrates the client-side
 pipeline pattern and allows the mock to return a mixed array that you then
 filter yourself. In production with tens of thousands of accounts, prefer
 the server-side `-Filter { Enabled -eq $false }` form. Note that
-`$disabled.Count` safely returns `0` when the pipeline yields nothing,
-because PowerShell always returns an array from `Where-Object`, never `$null`.
+Wrapping the pipeline in `@(...)` guarantees an array for zero, one, or many
+results, so `$disabled.Count` is unambiguous.
 
 ---
 
@@ -150,31 +151,36 @@ summary object.
 
 ```powershell
 function New-UserOnboarding {
+    [CmdletBinding(SupportsShouldProcess)]
     param(
         [Parameter(Mandatory)] [string] $FirstName,
         [Parameter(Mandatory)] [string] $LastName,
         [Parameter(Mandatory)] [string] $Department,
-        [Parameter(Mandatory)] [string] $Title
+        [Parameter(Mandatory)] [string] $Title,
+        [Parameter(Mandatory)] [SecureString] $TemporaryPassword
     )
 
     $sam = "$($FirstName.Substring(0,1).ToLower())$($LastName.ToLower())"
     $upn = "$sam@corp.local"
 
-    New-ADUser `
-        -Name              "$FirstName $LastName" `
-        -SamAccountName    $sam `
-        -UserPrincipalName $upn `
-        -Enabled           $true
+    if ($PSCmdlet.ShouldProcess($sam, 'Create and configure AD user')) {
+        New-ADUser `
+            -Name              "$FirstName $LastName" `
+            -SamAccountName    $sam `
+            -UserPrincipalName $upn `
+            -AccountPassword   $TemporaryPassword `
+            -Enabled           $true
 
-    Set-ADUser -Identity $sam -Department $Department -Title $Title
+        Set-ADUser -Identity $sam -Department $Department -Title $Title
 
-    Add-ADGroupMember -Identity 'AllEmployees' -Members $sam
-    Add-ADGroupMember -Identity $Department    -Members $sam
+        Add-ADGroupMember -Identity 'AllEmployees' -Members $sam
+        Add-ADGroupMember -Identity $Department    -Members $sam
 
-    [PSCustomObject]@{
-        SAM    = $sam
-        UPN    = $upn
-        Groups = @('AllEmployees', $Department)
+        [PSCustomObject]@{
+            SAM    = $sam
+            UPN    = $upn
+            Groups = @('AllEmployees', $Department)
+        }
     }
 }
 ```
@@ -182,8 +188,10 @@ function New-UserOnboarding {
 ### Expected Output
 
 ```powershell
+$temporaryPassword = Read-Host 'Temporary password for Charlie Davis' -AsSecureString
 $result = New-UserOnboarding -FirstName 'Charlie' -LastName 'Davis' `
-                              -Department 'Engineering' -Title 'Developer'
+    -Department 'Engineering' -Title 'Developer' `
+    -TemporaryPassword $temporaryPassword
 
 $result.SAM    # cdavis
 $result.UPN    # cdavis@corp.local
@@ -202,6 +210,7 @@ works cleanly in Pester via the `-Contain` operator. `Should -Invoke
 Add-ADGroupMember -Times 2` in the test verifies both group calls fired
 without needing a real domain — a good example of behaviour verification
 (did we attempt the right operations?) rather than state verification (is
-the user actually in the group?). In a real onboarding script you'd add
-`SupportsShouldProcess` and `-WhatIf` support; see the chapter's
-`New-UserOnboarding` listing for the full production version.
+the user actually in the group?). The caller supplies a `SecureString`; the
+function never contains or derives a plaintext credential. Because every AD
+write is inside `ShouldProcess`, callers can preview the complete mutation
+unit with `-WhatIf`.

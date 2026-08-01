@@ -748,7 +748,7 @@ def _validate_answer_coverage(
         if title is not None:
             answer_owner[title.group(1)] = answer_relative
 
-    expected_tests = {'run-all.ps1'} | {
+    expected_tests = {'Run-AllTests.ps1'} | {
         f'ch-{chapter_id}.tests.ps1' for chapter_id in chapter_exercises
     }
     test_directory = root / 'tests'

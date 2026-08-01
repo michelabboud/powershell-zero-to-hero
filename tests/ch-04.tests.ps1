@@ -1,5 +1,5 @@
 #Requires -Version 7.4
-#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.5' }
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.7.1' }
 
 Describe "Chapter 04 - Variables & Types" {
     It "Ex-1 (Simple): 5 different types verified" {

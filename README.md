@@ -58,10 +58,11 @@ python3 scripts/validate_repository.py
 
 ## Running the Answer Tests
 
-Requires PowerShell 7.4+ and Pester 5.5+.
+Requires PowerShell 7.4+ and Pester 5.7.1+; the guide is verified with
+PowerShell 7.6.4 and Pester 6.0.1 while retaining Pester 5.7.1 compatibility.
 
 ```powershell
-pwsh ./tests/run-all.ps1
+pwsh ./tests/Run-AllTests.ps1
 ```
 
 ## Structure

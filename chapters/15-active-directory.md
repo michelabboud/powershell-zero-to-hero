@@ -8,9 +8,11 @@ Sam has 200 users to create. Max has a CSV template. ADUC has a mouse.
 
 ## The ActiveDirectory Module
 
-Before you can do anything, you need the module. It ships with the **Remote
-Server Administration Tools (RSAT)** on Windows, or via the
-`ActiveDirectory` module on a Domain Controller.
+Before you can do anything, you need the Windows-only `ActiveDirectory`
+module. It ships with **Remote Server Administration Tools (RSAT)** on Windows
+client systems and is available on a Domain Controller after the relevant AD
+DS management tools are installed. These cmdlets aren't supported natively on
+Linux or macOS.
 
 ```powershell
 # Check if it's available
@@ -73,8 +75,9 @@ Get-ADUser -Filter { Enabled -eq $true }
 Get-ADUser -Filter { Department -eq 'HR' -and Enabled -eq $true }
 ```
 
-The filter syntax inside `{ }` is **not** standard PowerShell — it's an
-LDAP-ish DSL that gets translated server-side. The golden rule: if the
+The filter syntax is the Active Directory module's PowerShell Expression
+Language, not an ordinary scriptblock evaluated locally. It is translated to
+a server-side directory query. The golden rule: if the
 property is an AD attribute, use `-Filter`. If you need complex logic that
 AD can't handle, pipe to `Where-Object`.
 
@@ -166,8 +169,8 @@ Set-ADUser -Identity jsmith `
     -Title 'Senior Engineer' `
     -Office 'London'
 
-# Clear an attribute by setting it to $null
-Set-ADUser -Identity jsmith -Description $null
+# Clear an attribute explicitly
+Set-ADUser -Identity jsmith -Clear 'description'
 
 # Use -Replace for multi-valued attributes or raw LDAP attribute names
 Set-ADUser -Identity jsmith -Replace @{ telephoneNumber = '+44 20 1234 5678' }
@@ -176,9 +179,9 @@ Set-ADUser -Identity jsmith -Replace @{ telephoneNumber = '+44 20 1234 5678' }
 Pipeline pattern for bulk updates:
 
 ```powershell
-# Disable all users in the Contractors OU
+# Preview disabling all users in the Contractors OU; remove -WhatIf only after review
 Get-ADUser -Filter * -SearchBase 'OU=Contractors,DC=corp,DC=local' |
-    Disable-ADAccount
+    Disable-ADAccount -WhatIf
 ```
 
 ---
@@ -188,6 +191,8 @@ Get-ADUser -Filter * -SearchBase 'OU=Contractors,DC=corp,DC=local' |
 `New-ADUser` has a lot of parameters. The important ones:
 
 ```powershell
+$temporaryPassword = Read-Host 'Temporary password for Jane Smith' -AsSecureString
+
 New-ADUser `
     -Name           'Jane Smith' `
     -GivenName      'Jane' `
@@ -195,7 +200,7 @@ New-ADUser `
     -SamAccountName 'jsmith' `
     -UserPrincipalName 'jsmith@corp.local' `
     -Path           'OU=Users,DC=corp,DC=local' `
-    -AccountPassword (ConvertTo-SecureString 'P@ssw0rd123!' -AsPlainText -Force) `
+    -AccountPassword $temporaryPassword `
     -Enabled        $true `
     -Department     'Engineering' `
     -Title          'Software Engineer'
@@ -204,7 +209,9 @@ New-ADUser `
 A few things worth knowing:
 
 - `-Path` is the DN of the **parent OU**, not the user itself.
-- `-AccountPassword` requires a `SecureString`. Never pass a plain string.
+- `-AccountPassword` requires a `SecureString`. Obtain it from a secret manager
+  or an interactive `Read-Host -AsSecureString`; don't embed plaintext and
+  convert it in source code.
 - `-Enabled $false` is the default. Forgetting `-Enabled $true` means the
   account is created but locked out. You will do this once. Everyone does.
 - The `-PassThru` switch returns the new AD object, useful for piping
@@ -212,11 +219,12 @@ A few things worth knowing:
 
 ```powershell
 # Create and immediately add to a group
-New-ADUser -Name 'Bob Jones' -SamAccountName 'bjones' `
+$bobPassword = Read-Host 'Temporary password for Bob Jones' -AsSecureString
+$bob = New-ADUser -Name 'Bob Jones' -SamAccountName 'bjones' `
     -Path 'OU=Users,DC=corp,DC=local' `
-    -AccountPassword (ConvertTo-SecureString 'P@ssw0rd123!' -AsPlainText -Force) `
-    -Enabled $true -PassThru |
-    Add-ADGroupMember -Identity 'AllEmployees' -Members { $_ }
+    -AccountPassword $bobPassword `
+    -Enabled $true -PassThru
+Add-ADGroupMember -Identity 'AllEmployees' -Members $bob
 ```
 
 ---
@@ -258,7 +266,7 @@ $users = Import-Csv './users.csv'
 foreach ($user in $users) {
     $sam  = "$($user.FirstName.Substring(0,1).ToLower())$($user.LastName.ToLower())"
     $upn  = "$sam@corp.local"
-    $pass = ConvertTo-SecureString 'Welcome1!' -AsPlainText -Force
+    $pass = Read-Host "Temporary password for $sam" -AsSecureString
 
     $params = @{
         Name               = "$($user.FirstName) $($user.LastName)"
@@ -283,7 +291,10 @@ foreach ($user in $users) {
 }
 ```
 
-Splatting (`@params`) keeps the loop body readable. Always wrap `New-ADUser`
+Splatting (`@params`) keeps the loop body readable. The interactive password
+prompt keeps credentials out of the CSV and source, but a production bulk
+workflow should retrieve a unique password or provisioning token from an
+approved identity/secret system instead of pausing for input. Always wrap `New-ADUser`
 in a `try/catch` in bulk scripts — one duplicate SAM account name would
 otherwise abort the entire run.
 
@@ -323,6 +334,7 @@ function New-UserOnboarding {
         [Parameter(Mandatory)] [string] $LastName,
         [Parameter(Mandatory)] [string] $Department,
         [Parameter(Mandatory)] [string] $Title,
+        [Parameter(Mandatory)] [SecureString] $TemporaryPassword,
         [string] $Manager,
         [string] $BasePath = 'OU=Users,DC=corp,DC=local'
     )
@@ -330,9 +342,6 @@ function New-UserOnboarding {
     $sam  = "$($FirstName.Substring(0,1).ToLower())$($LastName.ToLower())"
     $upn  = "$sam@corp.local"
     $ouPath = "OU=$Department,$BasePath"
-
-    # Derive a temp password -- in real life, use a vault
-    $pass = ConvertTo-SecureString 'Welcome1!' -AsPlainText -Force
 
     if ($PSCmdlet.ShouldProcess($sam, 'Create AD user and assign groups')) {
         New-ADUser `
@@ -342,7 +351,7 @@ function New-UserOnboarding {
             -SamAccountName    $sam `
             -UserPrincipalName $upn `
             -Path              $ouPath `
-            -AccountPassword   $pass `
+            -AccountPassword   $TemporaryPassword `
             -Department        $Department `
             -Title             $Title `
             -Enabled           $true
@@ -368,13 +377,15 @@ function New-UserOnboarding {
 }
 
 # Usage
+$temporaryPassword = Read-Host 'Temporary password for Charlie Davis' -AsSecureString
 New-UserOnboarding -FirstName 'Charlie' -LastName 'Davis' `
                    -Department 'Engineering' -Title 'Developer' `
-                   -Manager 'rina'
+                   -Manager 'rina' -TemporaryPassword $temporaryPassword -WhatIf
 ```
 
-`SupportsShouldProcess` gives you `-WhatIf` for free. Run it with `-WhatIf`
-first in any environment you value.
+`SupportsShouldProcess` adds `-WhatIf` and `-Confirm`, but only because the
+function wraps its mutation block in `$PSCmdlet.ShouldProcess()`. Run it with
+`-WhatIf` first in any environment you value.
 
 ---
 
@@ -411,7 +422,7 @@ Write a script that retrieves all enabled users from
 Use a mock in your test so no AD connection is required.
 
 **Constraints:**
-- Use `Get-ADUser -Filter` (not `-Identity`)
+- Use `Get-ADUser -Filter { Enabled -eq $true }` (not `-Identity`)
 - Use `-SearchBase` to scope the query
 - Output must include at least two users
 
@@ -447,14 +458,16 @@ as first initial + lowercase surname. Return a summary object per user.
 ### [Ch-15, Ex-4] Automated Onboarding Script (Extreme)
 
 Write a `New-UserOnboarding` function that:
-1. Accepts `FirstName`, `LastName`, `Department`, `Title` as mandatory parameters
+1. Accepts `FirstName`, `LastName`, `Department`, `Title`, and a caller-provided
+   `SecureString` temporary password as mandatory parameters
 2. Derives `SamAccountName` and `UserPrincipalName` from the name
-3. Calls `New-ADUser` to create the account (enabled, with a temp password)
+3. Calls `New-ADUser` to create the account enabled with that temporary password
 4. Calls `Set-ADUser` to set `Department` and `Title`
 5. Calls `Add-ADGroupMember` twice: once for `'AllEmployees'` and once for the department group
 6. Returns a `[PSCustomObject]` with `SAM`, `UPN`, and `Groups` properties
 
 **Constraints:**
 - All AD cmdlets mocked in Pester
+- No plaintext password literals in the function or test fixture
 - `Groups` property must be an array containing both group names
 - `Should -Invoke` assertions on all three AD cmdlets

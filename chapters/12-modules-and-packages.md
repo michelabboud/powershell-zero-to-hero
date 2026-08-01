@@ -73,8 +73,9 @@ auto-discovered by `Get-Module -ListAvailable` and auto-imported on first use
 in PowerShell 3+.
 
 The user-scoped modules folder (`~/Documents/PowerShell/Modules` on Windows,
-`~/.local/share/powershell/Modules` on Linux) is where `Install-Module` puts
-things by default and where your own modules should live during development.
+`~/.local/share/powershell/Modules` on Linux/macOS) is where resource managers
+install modules for `CurrentUser` and where your own modules can live during
+development.
 
 ---
 
@@ -93,7 +94,7 @@ Import-Module ./MyModule/MyModule.psm1
 Import-Module ./MyModule -Force
 
 # Load a specific version
-Import-Module Pester -RequiredVersion 5.6.1
+Import-Module Pester -RequiredVersion 6.0.1
 
 # Import and suppress the "already imported" noise
 Import-Module Pester -ErrorAction SilentlyContinue
@@ -127,41 +128,44 @@ the shell.
 
 PSGallery is the official public repository for PowerShell modules, scripts,
 and DSC resources. It's backed by NuGet and maintained by Microsoft.
+`Microsoft.PowerShell.PSResourceGet` is the current package-management module;
+PowerShellGet v2 commands such as `Install-Module` remain common in older
+automation.
 
 ![gallery-flow](assets/images/ch-12-gallery-flow.png)
 
 ### Finding Modules
 
 ```powershell
-# Search for modules by keyword
-Find-Module -Name '*aws*'
-Find-Module -Tag 'Azure'
-Find-Module -Name 'PSReadLine' -Repository PSGallery
+# Search for resources by keyword
+Find-PSResource -Name '*aws*'
+Find-PSResource -Tag 'Azure'
+Find-PSResource -Name 'PSReadLine' -Repository PSGallery
 
-# See all versions of a module
-Find-Module -Name Pester -AllVersions
+# See all versions of a resource
+Find-PSResource -Name Pester -Version '*'
 
-# Find modules matching a keyword in description
-Find-Module -Filter 'DNS management'
+# Find resources that export a command name
+Find-PSResource -CommandName '*Dns*'
 ```
 
 ### Installing Modules
 
 ```powershell
 # Install for the current user only (no admin required)
-Install-Module -Name PSReadLine -Scope CurrentUser
+Install-PSResource -Name PSReadLine -Scope CurrentUser
 
 # Install a specific version
-Install-Module -Name Pester -RequiredVersion 5.6.1 -Scope CurrentUser
+Install-PSResource -Name Pester -Version 6.0.1 -Scope CurrentUser
 
 # Install and trust PSGallery without prompting (useful in scripts)
-Install-Module -Name ImportExcel -Scope CurrentUser -Force
+Install-PSResource -Name ImportExcel -Scope CurrentUser -TrustRepository
 
 # Update an installed module to the latest version
-Update-Module -Name PSReadLine
+Update-PSResource -Name PSReadLine
 
 # Remove an installed module from disk
-Uninstall-Module -Name OldModule
+Uninstall-PSResource -Name OldModule
 ```
 
 The `-Scope CurrentUser` flag installs into your user-scoped modules directory
@@ -176,11 +180,14 @@ trust the repository. In automated pipelines, pre-trust it explicitly:
 
 ```powershell
 # Register the gallery as trusted (run once, or in pipeline setup)
-Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+Set-PSResourceRepository -Name PSGallery -Trusted
 
 # Verify
-Get-PSRepository
+Get-PSResourceRepository
 ```
+
+In security-sensitive automation, pin `-Version` and verify publisher/repository
+policy rather than silently accepting whatever version is newest.
 
 ---
 
@@ -284,7 +291,7 @@ optional, but these are the ones you should always fill in:
 | `RootModule` | Points to your `.psm1` -- without this, the manifest does nothing |
 | `FunctionsToExport` | Defines the public API for tab-completion and discovery |
 | `PowerShellVersion` | Guards against running on incompatible PS versions |
-| `Description` | Required for PSGallery; shows up in `Find-Module` results |
+| `Description` | Required for PSGallery publication; shown by `Find-PSResource` |
 
 ### Validating a Manifest
 
@@ -350,7 +357,7 @@ or module. If the requirements aren't met, the script refuses to execute.
 
 # Specific modules must be installed
 #Requires -Modules Pester
-#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.5' }
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.7.1' }
 
 # Must run as Administrator (Windows only)
 #Requires -RunAsAdministrator
@@ -360,10 +367,11 @@ or module. If the requirements aren't met, the script refuses to execute.
 #Requires -Modules @{ ModuleName = 'Az.Accounts'; ModuleVersion = '2.0' }
 ```
 
-`#Requires` must appear at the top of the file, before any code. It's not a
-comment -- PowerShell parses it specially. If the requirement fails, you get a
-clear, actionable error message rather than a cryptic runtime failure three
-functions deep.
+`#Requires` applies to the entire script even if it isn't physically first,
+but placing it at the top makes prerequisites visible before readers reach the
+code. It's not an ordinary comment -- PowerShell parses it specially. If the
+requirement fails, you get a clear, actionable error message rather than a
+cryptic runtime failure three functions deep.
 
 Use `#Requires` in:
 - Any script that depends on non-default modules
@@ -468,17 +476,17 @@ Build a module called `DataUtils` with a clear public/private separation:
 
 - `Get-Module` shows what's loaded; `Get-Module -ListAvailable` shows what's
   on `$env:PSModulePath`. Know the difference.
-- `Import-Module -Force` is mandatory during development. Without it, your
-  edits don't take effect.
-- `Export-ModuleMember` is not optional -- call it explicitly to define your
-  public API and keep private helpers private.
+- `Import-Module -Force` is useful during development so edits take effect in
+  the current session.
+- Call `Export-ModuleMember` explicitly to define your public API; otherwise a
+  script module exports functions and aliases by default.
 - A `.psd1` manifest adds versioning, dependency declarations, and
   discoverability. Write one for every module you share.
 - Use `New-ModuleManifest` to generate the manifest. Use `Test-ModuleManifest`
   to validate it in CI.
-- PSGallery is the public module registry. `Find-Module` / `Install-Module` /
-  `Update-Module` are your interface to it. Use `-Scope CurrentUser` unless
-  you specifically need system-wide installation.
+- PSGallery is the public resource registry. `Find-PSResource`,
+  `Install-PSResource`, and `Update-PSResource` are the current interface. Use
+  `-Scope CurrentUser` unless you specifically need a system-wide installation.
 - `#Requires` runs before your code. Use it to gate on PS version, required
   modules, and admin rights.
 - The Public/Private folder pattern scales cleanly and makes your module's

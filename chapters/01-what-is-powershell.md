@@ -59,8 +59,10 @@ automation shell built on objects rather than text. Microsoft agreed -- eventual
 | 2006 | 1.0 | First release. Windows only. 129 cmdlets. |
 | 2009 | 2.0 | Remoting, background jobs, modules, ISE. |
 | 2012 | 3.0 | Workflows, scheduled jobs, improved pipeline. |
-| 2016 | 6.0 | **Open-sourced.** Cross-platform on .NET Core. |
-| 2024 | 7.4 | Modern, stable, .NET 8, production-ready everywhere. |
+| 2016 | Open source | Microsoft released PowerShell's source and began the cross-platform project. |
+| 2018 | 6.0 | First generally available cross-platform release on .NET Core. |
+| 2024 | 7.4 LTS | Long-term-support release built on .NET 8. |
+| 2026 | 7.6 LTS | Current LTS line, built on .NET 10. |
 
 The rename from "Windows PowerShell" (5.1, .NET Framework) to just "PowerShell" (7.x, .NET)
 wasn't cosmetic. It signaled a fundamental shift: PowerShell is no longer Windows-only, and
@@ -74,8 +76,8 @@ Five reasons working sysadmins, DevOps engineers, and developers reach for Power
 
 1. **Object pipeline** -- No more parsing `awk '{print $3}'`. Properties are properties.
 2. **.NET integration** -- Need to call a .NET library? `[System.IO.File]::ReadAllText()` works inline.
-3. **Cross-platform** -- Same scripts run on Windows, Linux, and macOS.
-4. **Module ecosystem** -- The PowerShell Gallery hosts 10,000+ modules. `Install-Module` and go.
+3. **Cross-platform** -- The language and core modules run on Windows, Linux, and macOS; platform-specific cmdlets still need explicit guards.
+4. **Module ecosystem** -- The PowerShell Gallery provides community and Microsoft modules through `Install-PSResource` (or the older `Install-Module`).
 5. **Windows administration** -- Active Directory, Exchange, Azure, Microsoft 365 -- all PowerShell-first.
 
 ```powershell
@@ -111,19 +113,25 @@ Knowing both makes you dangerous in the best way.
 
 ## 5. Installing PowerShell 7
 
-PowerShell 7 runs alongside Windows PowerShell 5.1 -- they don't conflict. Install it on any
-OS with one command:
+PowerShell 7 runs alongside Windows PowerShell 5.1 -- they don't conflict. Use the
+installation method supported for your operating system and verify the current package on
+the official PowerShell installation page before automating a fleet rollout.
 
 ### Windows (winget)
 
 ```powershell
-winget install Microsoft.PowerShell
+winget install --id Microsoft.PowerShell --source winget
 ```
 
-### macOS (Homebrew)
+### macOS (Microsoft-signed package)
+
+Download the package for your CPU architecture from the official stable release page and
+open the `.pkg`. Current packages are signed and notarized by Microsoft.
+
+Homebrew is a community-supported alternative (not a Microsoft-supported package):
 
 ```bash
-brew install powershell/tap/powershell
+brew install powershell
 ```
 
 ### Linux -- Ubuntu/Debian (apt)
@@ -139,7 +147,7 @@ sudo apt-get update
 sudo apt-get install -y powershell
 ```
 
-### Linux -- Snap (universal)
+### Linux -- Snap (Canonical-maintained alternative)
 
 ```bash
 sudo snap install powershell --classic
@@ -169,9 +177,9 @@ $PSVersionTable
 ```
 Name                           Value
 ----                           -----
-PSVersion                      7.4.6
+PSVersion                      7.6.4
 PSEdition                      Core
-GitCommitId                    7.4.6
+GitCommitId                    7.6.4
 OS                             Microsoft Windows 10.0.22631
 Platform                       Win32NT
 PSCompatibleVersions           {1.0, 2.0, 3.0, 4.0, 5.0, 5.1...}
@@ -190,13 +198,13 @@ Get-Date
 ```
 
 ```
-Tuesday, March 17, 2026 10:42:15 AM
+Saturday, August 1, 2026 10:42:15 AM
 ```
 
 That returned a `[DateTime]` object. You can chain methods on it:
 
 ```powershell
-(Get-Date).DayOfWeek    # Tuesday
+(Get-Date).DayOfWeek    # Saturday
 (Get-Date).Year         # 2026
 ```
 
@@ -242,24 +250,39 @@ PowerShell.
 
 ```powershell
 # boss-level-01.ps1 -- OS-aware PowerShell installer
-param(
-    [switch]$Force
-)
-
 $ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
+
+function Invoke-NativeChecked {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Command,
+
+        [Parameter(Mandatory)]
+        [string[]]$ArgumentList
+    )
+
+    & $Command @ArgumentList
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Command failed with exit code $LASTEXITCODE."
+    }
+}
 
 function Install-PowerShellUpdate {
     if ($IsWindows) {
         if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
             throw "winget not found. Install App Installer from the Microsoft Store."
         }
-        winget upgrade Microsoft.PowerShell --accept-source-agreements --accept-package-agreements
+        Invoke-NativeChecked winget @(
+            'upgrade', '--id', 'Microsoft.PowerShell', '--source', 'winget',
+            '--accept-source-agreements', '--accept-package-agreements'
+        )
     }
     elseif ($IsMacOS) {
         if (-not (Get-Command brew -ErrorAction SilentlyContinue)) {
             throw "Homebrew not found. Install from https://brew.sh"
         }
-        brew upgrade powershell/tap/powershell 2>&1 | Write-Host
+        Invoke-NativeChecked brew @('upgrade', 'powershell')
     }
     elseif ($IsLinux) {
         # Check for root/sudo
@@ -267,14 +290,23 @@ function Install-PowerShellUpdate {
         if ($whoami -ne 'root' -and -not (Get-Command sudo -ErrorAction SilentlyContinue)) {
             throw "Must run as root or have sudo installed."
         }
-        $prefix = if ($whoami -ne 'root') { 'sudo' } else { '' }
-
         if (Get-Command apt-get -ErrorAction SilentlyContinue) {
-            Invoke-Expression "$prefix apt-get update -qq"
-            Invoke-Expression "$prefix apt-get install -y powershell"
+            if ($whoami -eq 'root') {
+                Invoke-NativeChecked apt-get @('update', '-qq')
+                Invoke-NativeChecked apt-get @('install', '-y', 'powershell')
+            }
+            else {
+                Invoke-NativeChecked sudo @('apt-get', 'update', '-qq')
+                Invoke-NativeChecked sudo @('apt-get', 'install', '-y', 'powershell')
+            }
         }
         elseif (Get-Command snap -ErrorAction SilentlyContinue) {
-            Invoke-Expression "$prefix snap refresh powershell 2>&1" | Write-Host
+            if ($whoami -eq 'root') {
+                Invoke-NativeChecked snap @('refresh', 'powershell')
+            }
+            else {
+                Invoke-NativeChecked sudo @('snap', 'refresh', 'powershell')
+            }
         }
         else {
             throw "No supported package manager found (apt-get or snap)."

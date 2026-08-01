@@ -1,5 +1,5 @@
 #Requires -Version 7.4
-#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.5' }
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.7.1' }
 
 Describe "Chapter 06 - Control Flow" {
     It "Ex-1 (Simple): if/elseif/else categorizes numbers" {
@@ -44,7 +44,11 @@ Describe "Chapter 06 - Control Flow" {
     It "Ex-4 (Extreme): retry with backoff respects max attempts" {
         $script:attempts = 0
         function Invoke-WithRetry {
-            param([scriptblock]$Action, [int]$MaxRetries = 3)
+            param(
+                [scriptblock]$Action,
+                [ValidateRange(1, 10)]
+                [int]$MaxRetries = 3
+            )
             for ($i = 0; $i -lt $MaxRetries; $i++) {
                 try {
                     return & $Action
@@ -63,5 +67,6 @@ Describe "Chapter 06 - Control Flow" {
         } -MaxRetries 5
         $result | Should -Be "Success"
         $script:attempts | Should -Be 3
+        { Invoke-WithRetry -Action { 'never' } -MaxRetries 0 } | Should -Throw
     }
 }

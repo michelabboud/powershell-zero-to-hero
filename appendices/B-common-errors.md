@@ -92,7 +92,9 @@ Get-Content 'C:\restricted.txt' -ErrorAction Stop
 message : The RPC server is unavailable.
 ```
 
-**Common cause:** WinRM is not running on the remote machine, the machine is unreachable, or a firewall is blocking TCP port 5985 (HTTP) or 5986 (HTTPS).
+**Common cause:** On a Windows WSMan target, WinRM is not running, the machine
+is unreachable, or a firewall is blocking TCP port 5985 (HTTP) or 5986
+(HTTPS). This diagnosis does not apply to PowerShell remoting over SSH.
 
 **Fix:**
 ```powershell
@@ -105,6 +107,9 @@ Enable-PSRemoting -Force
 # If the machine is in a workgroup, add it to TrustedHosts
 Set-Item WSMan:\localhost\Client\TrustedHosts -Value 'server01' -Force
 ```
+
+Use an exact host list, not `*`. `TrustedHosts` weakens mutual authentication;
+prefer domain/Kerberos or HTTPS with certificate validation where available.
 
 **Prevention tip:** Run `Test-WSMan server01` before any `Invoke-Command` — it's a fast sanity check that costs nothing.
 
@@ -266,14 +271,16 @@ Get-ChildItem *.tmp | Remove-Item   # Remove-Item accepts pipeline input
 
 ---
 
-## Error 11: Running scripts is disabled on this system
+## Error 11: Running scripts is disabled on this system (Windows)
 
 ```
 File C:\scripts\deploy.ps1 cannot be loaded because running scripts is
 disabled on this system. For more information, see about_Execution_Policies.
 ```
 
-**Common cause:** The PowerShell execution policy is set to `Restricted` (the Windows default) or `AllSigned`, and your script is not signed.
+**Common cause:** On Windows, the execution policy is set to `Restricted` or
+`AllSigned`, and your script is not signed. Execution policy is not enforced
+on Linux or macOS and isn't a security boundary.
 
 **Fix:**
 ```powershell
@@ -282,15 +289,11 @@ Get-ExecutionPolicy -List
 
 # Set for current user (recommended for dev machines)
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
-
-# Run a single script bypassing policy (for one-off use)
-PowerShell.exe -ExecutionPolicy Bypass -File .\deploy.ps1
-
-# In CI/CD pipelines
-$env:PSExecutionPolicyPreference = 'Bypass'
 ```
 
-**Prevention tip:** Use `RemoteSigned` rather than `Unrestricted` — it still requires internet-downloaded scripts to be signed, which is a sensible safety net.
+**Prevention tip:** Use the narrowest policy your organization permits and
+sign trusted automation. Don't use `Bypass` as a routine fix, and never treat
+a policy change as evidence that an untrusted script is safe.
 
 ---
 
@@ -335,16 +338,15 @@ type does not support user interaction.
 $cred = Get-Credential   # do this in an interactive session first
 Invoke-Command -ComputerName server01 -Credential $cred -ScriptBlock { ... }
 
-# In automated scripts, build a credential object from secure strings
-$pwd  = ConvertTo-SecureString 'P@ssword' -AsPlainText -Force
-$cred = New-Object System.Management.Automation.PSCredential('user', $pwd)
-
-# Better yet: use a secrets manager or environment variables
-$cred = [PSCredential]::new($env:SVC_USER,
-        (ConvertTo-SecureString $env:SVC_PASS -AsPlainText -Force))
+# In automation, retrieve the secret from an approved secret store.
+# Example with Microsoft.PowerShell.SecretManagement:
+$pwd  = Get-Secret -Name 'service-account-password'
+$cred = [PSCredential]::new('user', $pwd)
 ```
 
-**Prevention tip:** Any script that will run unattended must never call `Read-Host` — parameterise everything, then call it with those parameters from your scheduler.
+**Prevention tip:** Unattended scripts must not prompt. Parameterize inputs and
+use a workload identity or secret manager; don't embed plaintext passwords or
+treat environment variables as a secure vault.
 
 ---
 
@@ -388,10 +390,10 @@ The module 'Az' could not be loaded. For more information, run
 **Fix:**
 ```powershell
 # Find if the module exists anywhere
-Find-Module Az   # searches PSGallery
+Find-PSResource Az   # searches PSGallery
 
 # Install it (current user, no admin required)
-Install-Module Az -Scope CurrentUser -Force
+Install-PSResource Az -Scope CurrentUser
 
 # Check where modules are loaded from
 $env:PSModulePath -split [IO.Path]::PathSeparator
@@ -444,11 +446,11 @@ At line:3 char:1
 **Fix:**
 ```powershell
 # Always initialise collection variables as arrays
-$services = @(Get-Service -ErrorAction SilentlyContinue)
-$running  = $services.Where({ $_.Status -eq 'Running' })
+$processes = @(Get-Process -ErrorAction SilentlyContinue)
+$active    = $processes.Where({ $_.Responding })
 
 # Or use the pipeline equivalent, which handles $null gracefully
-Get-Service | Where-Object { $_.Status -eq 'Running' }
+Get-Process | Where-Object { $_.Responding }
 ```
 
 **Prevention tip:** Prefer pipeline `Where-Object` over the `.Where()` method unless you're in a hot loop and need the performance; the pipeline version degrades gracefully when input is empty.
@@ -462,12 +464,14 @@ Get-Service | Where-Object { $_.Status -eq 'Running' }
 following error message: WinRM cannot complete the operation.
 ```
 
-**Common cause:** WinRM is enabled but the target machine name cannot be resolved by DNS, the machine is in a different domain, or the credentials don't have permission to create a remote session.
+**Common cause:** On a Windows WSMan target, WinRM is enabled but the target
+name cannot be resolved, trust/authentication is misconfigured, or the caller
+lacks permission to create a remote session.
 
 **Fix:**
 ```powershell
 # Step-by-step diagnosis
-Test-Connection webserver02 -Count 1                  # basic ping
+Resolve-DnsName webserver02                            # DNS (Windows cmdlet)
 Test-NetConnection webserver02 -Port 5985             # WinRM HTTP
 Test-WSMan webserver02                                 # WinRM handshake
 
@@ -479,7 +483,9 @@ Enter-PSSession -ComputerName webserver02 -Credential $cred
 New-PSSession -ComputerName webserver02 -Credential $cred -Authentication Negotiate
 ```
 
-**Prevention tip:** Build a standard `Test-WinRMReady` function that runs `Test-Connection` + `Test-WSMan` and call it before any remoting block in automated scripts.
+**Prevention tip:** Validate DNS, the configured port, authentication, and
+`Test-WSMan` before automation. Ping may be blocked even when WinRM is healthy,
+so don't make ICMP success a prerequisite.
 
 ---
 
@@ -499,11 +505,13 @@ Get-Process | Format-Table Name, CPU | Export-Csv .\procs.csv   # broken
 # Right: Select-Object, then export
 Get-Process | Select-Object Name, CPU | Export-Csv .\procs.csv -NoTypeInformation
 
-# Format-* is always the LAST thing in a pipeline
+# Format-* is the last data transformation
 Get-Process | Select-Object Name, CPU | Format-Table
 ```
 
-**Prevention tip:** Treat `Format-Table`, `Format-List`, and `Format-Wide` as terminal cmdlets — nothing useful should come after them in a pipeline.
+**Prevention tip:** After `Format-Table`, `Format-List`, or `Format-Wide`, only
+send formatting output to a display-oriented sink such as `Out-Host`,
+`Out-String`, or `Out-File`.
 
 ---
 
@@ -522,7 +530,7 @@ Get-Variable PSVersionTable | Select-Object -ExpandProperty Options
 # Output: ReadOnly
 
 # If you declared it as constant/readonly by mistake:
-Set-Variable -Name MyVar -Value 'original' -Option None   # remove readonly
+Set-Variable -Name MyVar -Option None -Force   # remove ReadOnly (not Constant)
 
 # For built-ins: don't try to overwrite them. Use a different name.
 $psVersion = $PSVersionTable.PSVersion   # copy the value you need
@@ -545,11 +553,10 @@ $psVersion = $PSVersionTable.PSVersion   # copy the value you need
 | `Stop` | Convert to terminating error (catchable with `try/catch`) |
 | `Inquire` | Ask the user what to do (interactive sessions only) |
 | `Ignore` | Suppress error and don't populate `$Error` |
-| `Suspend` | Suspend the workflow (workflows only) |
 
 ```powershell
 # Set default for a script
-$ErrorActionPreference = 'Stop'   # makes ALL errors terminating in this scope
+$ErrorActionPreference = 'Stop'   # promotes PowerShell non-terminating errors in this scope
 
 # Per-command override
 Get-Item 'missing.txt' -ErrorAction SilentlyContinue

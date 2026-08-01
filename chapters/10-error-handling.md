@@ -29,7 +29,7 @@ A **non-terminating error** is PowerShell's way of saying: "Something went wrong
 
 ```powershell
 # Non-terminating: errors on individual items, but the pipeline keeps running
-Get-Item 'C:\DoesNotExist', 'C:\Windows' -ErrorAction Continue
+Get-Item './DoesNotExist', $PSHOME -ErrorAction Continue
 ```
 
 ```
@@ -67,7 +67,7 @@ Here's the trick that makes `try`/`catch` useful for cmdlets: `-ErrorAction Stop
 
 ```powershell
 try {
-    Get-Item 'C:\DoesNotExist' -ErrorAction Stop
+    Get-Item './DoesNotExist' -ErrorAction Stop
 } catch {
     "Caught it: $_"
 }
@@ -83,7 +83,8 @@ Without `-ErrorAction Stop`, the `catch` block would never run. This is the most
 
 ### `$ErrorActionPreference`
 
-This global variable sets the default behavior for all error-generating cmdlets in the current session.
+This preference variable sets the default behavior for PowerShell commands in
+its current dynamic scope and child scopes.
 
 | Value | Behavior |
 |-------|----------|
@@ -98,8 +99,14 @@ This global variable sets the default behavior for all error-generating cmdlets 
 $ErrorActionPreference = 'Stop'
 
 # Now every cmdlet error terminates
-Get-Item 'C:\DoesNotExist'  # throws; no -ErrorAction needed
+Get-Item './DoesNotExist'  # throws; no -ErrorAction needed
 ```
+
+This preference doesn't automatically turn a nonzero exit code from a native
+program into a PowerShell error. Check `$LASTEXITCODE`, or deliberately enable
+the PowerShell 7 native-error integration with
+`$PSNativeCommandUseErrorActionPreference = $true` after testing the programs
+your script invokes.
 
 > **Rule of thumb for scripts:** Set `$ErrorActionPreference = 'Stop'` at the top of production scripts. It turns subtle silent failures into loud, catchable errors. Rina came from Python, where exceptions are the default. In PowerShell, you have to opt in. One line at the top is all it takes.
 
@@ -111,7 +118,7 @@ Get-Item 'C:\DoesNotExist'  # throws; no -ErrorAction needed
 $ErrorActionPreference = 'Stop'
 
 # This one cmdlet should be allowed to fail silently
-$result = Get-Item 'C:\MightNotExist' -ErrorAction SilentlyContinue
+$result = Get-Item './MightNotExist' -ErrorAction SilentlyContinue
 
 if ($null -eq $result) {
     Write-Host "File not found, using defaults."
@@ -152,7 +159,7 @@ Inside a `catch` block, `$_` is automatically bound to the `ErrorRecord` object 
 
 ```powershell
 try {
-    Get-Item 'C:\NoSuchFile' -ErrorAction Stop
+    Get-Item './NoSuchFile' -ErrorAction Stop
 }
 catch {
     Write-Host "Message:   $($_.Exception.Message)"
@@ -175,7 +182,7 @@ You can have multiple `catch` blocks, each targeting a different .NET exception 
 
 ```powershell
 try {
-    Get-Content 'C:\Secret\File.txt' -ErrorAction Stop
+    Get-Content './restricted/file.txt' -ErrorAction Stop
 }
 catch [System.Management.Automation.ItemNotFoundException] {
     Write-Host "File not found. Check the path."
@@ -194,7 +201,7 @@ The unqualified `catch` at the end is the catch-all. Always put it last.
 
 ```powershell
 try {
-    Get-Content 'C:\NoSuchFile' -ErrorAction Stop
+    Get-Content './NoSuchFile' -ErrorAction Stop
 }
 catch {
     $_.Exception.GetType().FullName
@@ -209,7 +216,7 @@ catch {
 ```powershell
 $stream = $null
 try {
-    $stream = [System.IO.File]::OpenRead('C:\data.bin')
+    $stream = [System.IO.File]::OpenRead('./data.bin')
     # ... process the stream
 }
 catch {
@@ -235,8 +242,8 @@ PowerShell maintains a global list of the last errors in `$Error`. It's a fixed-
 $Error.Clear()
 
 # Trigger a couple of errors
-Get-Item 'C:\NoSuchA' -ErrorAction SilentlyContinue
-Get-Item 'C:\NoSuchB' -ErrorAction SilentlyContinue
+Get-Item './NoSuchA' -ErrorAction SilentlyContinue
+Get-Item './NoSuchB' -ErrorAction SilentlyContinue
 
 # Most recent error is $Error[0]
 $Error[0].Exception.Message    # Cannot find path 'C:\NoSuchB'...
@@ -258,7 +265,7 @@ If you want to capture errors from a specific cmdlet without changing `$ErrorAct
 
 ```powershell
 # Capture errors into $myErrors (note: no $ in the parameter value)
-Get-Item 'C:\NoSuchA', 'C:\Windows' -ErrorAction SilentlyContinue -ErrorVariable myErrors
+Get-Item './NoSuchA', $PSHOME -ErrorAction SilentlyContinue -ErrorVariable myErrors
 
 Write-Host "Errors captured: $($myErrors.Count)"
 Write-Host "First error: $($myErrors[0].Exception.Message)"
@@ -286,6 +293,7 @@ These both signal errors, but they behave very differently.
 
 ```powershell
 function Get-SafeFile {
+    [CmdletBinding()]
     param([string]$Path)
     if (-not (Test-Path $Path)) {
         Write-Error "File not found: $Path"
@@ -295,8 +303,8 @@ function Get-SafeFile {
 }
 
 # Caller can decide what to do with the error
-Get-SafeFile -Path 'C:\NoSuchFile' -ErrorAction SilentlyContinue
-Get-SafeFile -Path 'C:\NoSuchFile' -ErrorAction Stop    # now terminating
+Get-SafeFile -Path './NoSuchFile' -ErrorAction SilentlyContinue
+Get-SafeFile -Path './NoSuchFile' -ErrorAction Stop    # now terminating
 ```
 
 The function respects `-ErrorAction` because `Write-Error` is a cmdlet that honors `$ErrorActionPreference`. This is what makes it the professional choice for `[CmdletBinding()]` functions.

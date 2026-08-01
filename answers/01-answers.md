@@ -5,16 +5,16 @@
 **Task:** Run `$PSVersionTable` and identify your PS version, edition, and OS.
 
 ```powershell
-# Tested -- PowerShell 7.4+ / Windows & Linux
+# Tested -- PowerShell 7.6.4 / Windows, Linux, and macOS-compatible core commands
 $PSVersionTable
-# Look for: PSVersion (e.g. 7.4.x), PSEdition (Core), OS (your OS string)
+# Look for: PSVersion (e.g. 7.6.x), PSEdition (Core), OS (your OS string)
 ```
 
 **Expected Output:**
 ```
 Name                           Value
 ----                           -----
-PSVersion                      7.4.6
+PSVersion                      7.6.4
 PSEdition                      Core
 OS                             Microsoft Windows 10...
 ...

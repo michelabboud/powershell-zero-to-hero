@@ -1,5 +1,5 @@
 #Requires -Version 7.4
-#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.5' }
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.7.1' }
 
 Describe "Chapter 15 - Active Directory" {
     BeforeAll {
@@ -18,7 +18,7 @@ Describe "Chapter 15 - Active Directory" {
                 [PSCustomObject]@{ Name = 'Jane Doe'; SamAccountName = 'jdoe'; Enabled = $true }
             )
         }
-        $users = Get-ADUser -Filter * -SearchBase 'OU=Users,DC=corp,DC=local'
+        $users = Get-ADUser -Filter { Enabled -eq $true } -SearchBase 'OU=Users,DC=corp,DC=local'
         $users.Count | Should -Be 2
         $users[0].SamAccountName | Should -Be 'jsmith'
     }
@@ -30,7 +30,7 @@ Describe "Chapter 15 - Active Directory" {
                 [PSCustomObject]@{ Name = 'Active User'; SamAccountName = 'auser'; Enabled = $true }
             )
         }
-        $disabled = Get-ADUser -Filter * | Where-Object { -not $_.Enabled }
+        $disabled = @(Get-ADUser -Filter * | Where-Object { -not $_.Enabled })
         $disabled.Count | Should -Be 1
         $disabled[0].SamAccountName | Should -Be 'ouser'
     }
@@ -57,24 +57,33 @@ Describe "Chapter 15 - Active Directory" {
         Mock Set-ADUser { }
 
         function New-UserOnboarding {
+            [CmdletBinding(SupportsShouldProcess)]
             param(
                 [string]$FirstName, [string]$LastName,
-                [string]$Department, [string]$Title
+                [string]$Department, [string]$Title,
+                [SecureString]$TemporaryPassword
             )
             $sam = "$($FirstName.Substring(0,1).ToLower())$($LastName.ToLower())"
             $upn = "$sam@corp.local"
-            New-ADUser -Name "$FirstName $LastName" -SamAccountName $sam -UserPrincipalName $upn -Enabled $true
-            Set-ADUser -Identity $sam -Department $Department -Title $Title
-            Add-ADGroupMember -Identity 'AllEmployees' -Members $sam
-            Add-ADGroupMember -Identity $Department -Members $sam
-            [PSCustomObject]@{ SAM = $sam; UPN = $upn; Groups = @('AllEmployees', $Department) }
+            if ($PSCmdlet.ShouldProcess($sam, 'Create and configure AD user')) {
+                New-ADUser -Name "$FirstName $LastName" -SamAccountName $sam `
+                    -UserPrincipalName $upn -AccountPassword $TemporaryPassword -Enabled $true
+                Set-ADUser -Identity $sam -Department $Department -Title $Title
+                Add-ADGroupMember -Identity 'AllEmployees' -Members $sam
+                Add-ADGroupMember -Identity $Department -Members $sam
+                [PSCustomObject]@{ SAM = $sam; UPN = $upn; Groups = @('AllEmployees', $Department) }
+            }
         }
 
-        $result = New-UserOnboarding -FirstName 'Charlie' -LastName 'Davis' -Department 'Engineering' -Title 'Developer'
+        $temporaryPassword = [SecureString]::new()
+        $result = New-UserOnboarding -FirstName 'Charlie' -LastName 'Davis' `
+            -Department 'Engineering' -Title 'Developer' -TemporaryPassword $temporaryPassword
         $result.SAM | Should -Be 'cdavis'
         $result.UPN | Should -Be 'cdavis@corp.local'
         $result.Groups | Should -Contain 'Engineering'
-        Should -Invoke New-ADUser -Times 1
+        Should -Invoke New-ADUser -Times 1 -ParameterFilter {
+            $AccountPassword -is [SecureString]
+        }
         Should -Invoke Add-ADGroupMember -Times 2
         Should -Invoke Set-ADUser -Times 1
     }

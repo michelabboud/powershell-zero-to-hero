@@ -1,5 +1,5 @@
 #Requires -Version 7.4
-#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.5' }
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.7.1' }
 
 Describe "Chapter 17 - DevOps & CI/CD" {
     It "Ex-1 (Simple): Pester test validates function output" {
@@ -28,7 +28,7 @@ Describe "Chapter 17 - DevOps & CI/CD" {
             $issues
         }
         # Create a test file with Write-Host
-        $testDir = Join-Path $env:TEMP "ps-lint-$(Get-Random)"
+        $testDir = Join-Path ([System.IO.Path]::GetTempPath()) "ps-lint-$(Get-Random)"
         New-Item $testDir -ItemType Directory -Force | Out-Null
         try {
             'Write-Host "bad practice"' | Set-Content (Join-Path $testDir 'bad.ps1')
@@ -49,7 +49,7 @@ Describe "Chapter 17 - DevOps & CI/CD" {
                 test = @{
                     'runs-on' = 'ubuntu-latest'
                     steps = @(
-                        @{ uses = 'actions/checkout@v4' },
+                        @{ uses = 'actions/checkout@v7' },
                         @{ name = 'Run Pester'; shell = 'pwsh'; run = 'Invoke-Pester -CI' }
                     )
                 }
@@ -58,6 +58,7 @@ Describe "Chapter 17 - DevOps & CI/CD" {
         $workflow.name | Should -Be 'PowerShell CI'
         $workflow.jobs.test.'runs-on' | Should -Be 'ubuntu-latest'
         $workflow.jobs.test.steps.Count | Should -Be 2
+        $workflow.jobs.test.steps[0].uses | Should -Be 'actions/checkout@v7'
     }
 
     It "Ex-4 (Extreme): full CI/CD pipeline dry-run" {

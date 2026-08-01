@@ -11,7 +11,7 @@ read it back, verify the content matches, then clean up.
 
 ```powershell
 # Build a safe temp path
-$file = Join-Path $env:TEMP "ps-ch09-ex1.txt"
+$file = Join-Path ([System.IO.Path]::GetTempPath()) "ps-ch09-ex1.txt"
 
 # Write content
 'Hello PowerShell' | Set-Content $file
@@ -41,14 +41,11 @@ Hello PowerShell
 
 ### What to notice
 
-`Set-Content` with a pipeline input string writes that string as a single
-line and appends a newline. When `Get-Content` reads it back, you get an
-array with one element. That means `$content -eq 'Hello PowerShell'` works
-without indexing because PowerShell scalar-compares a single-element array
-transparently in most contexts -- but `$content[0]` is the explicit and
-unambiguous form. For production validation code, use `$content[0]` to be
-explicit about what you're comparing. `Test-Path` returns `$true`/`$false`,
-making it naturally usable in `if` conditions without any comparison operator.
+`Set-Content` with a pipeline input string writes that string as one line.
+When `Get-Content` reads a one-line file, assignment produces a scalar string;
+multiple lines produce an array. Wrap the read in `@(...)` when later code must
+always use array indexing. `Test-Path` returns `$true`/`$false`, making it
+naturally usable in `if` conditions without any comparison operator.
 
 ---
 
@@ -67,10 +64,10 @@ Name,CPU,Memory
 web01,45,2048
 db01,80,8192
 app01,30,4096
-"@ | Set-Content (Join-Path $env:TEMP 'servers.csv')
+"@ | Set-Content (Join-Path ([System.IO.Path]::GetTempPath()) 'servers.csv')
 
-$csvIn  = Join-Path $env:TEMP 'servers.csv'
-$csvOut = Join-Path $env:TEMP 'servers-report.csv'
+$csvIn  = Join-Path ([System.IO.Path]::GetTempPath()) 'servers.csv'
+$csvOut = Join-Path ([System.IO.Path]::GetTempPath()) 'servers-report.csv'
 
 Import-Csv $csvIn |
     Select-Object Name, CPU, Memory, @{
@@ -104,15 +101,14 @@ Three things are worth studying here:
    current pipeline item. This pattern appears everywhere in real scripts.
 
 2. **Type casting** -- CSV imports all values as strings. `[int]$_.Memory`
-   casts the string `"2048"` to an integer before the math. Without the
-   cast, `2048 / 1024` would fail or give wrong results because PowerShell
-   would attempt string arithmetic. Always cast CSV fields before doing math.
+   documents the expected type and makes malformed input fail clearly before
+   the calculation. PowerShell can coerce a numeric-looking string during
+   arithmetic, but relying on implicit conversion hides data-quality errors.
 
-3. **-NoTypeInformation** -- Without this flag, `Export-Csv` adds a first
-   line like `#TYPE Selected.System.Management.Automation.PSCustomObject`
-   to the file. That line breaks almost every downstream tool that reads the
-   CSV. Always include `-NoTypeInformation` unless you specifically need it
-   for PowerShell-internal round-tripping.
+3. **-NoTypeInformation** -- PowerShell 6 and later omit the `#TYPE` line by
+   default. Keeping this switch is harmless and makes the intent explicit when
+   the example is copied to Windows PowerShell 5.1. Use
+   `-IncludeTypeInformation` only when a consumer explicitly requires it.
 
 ---
 
@@ -127,9 +123,9 @@ older than 30 days. Generate a CSV deletion report with `FullName`,
 ### Solution
 
 ```powershell
-$targetDir = $env:TEMP   # or any directory you want to audit
+$targetDir = [System.IO.Path]::GetTempPath()   # or any directory you want to audit
 $cutoff    = (Get-Date).AddDays(-30)
-$report    = Join-Path $env:TEMP "stale-files-$(Get-Date -Format yyyyMMdd-HHmmss).csv"
+$report    = Join-Path ([System.IO.Path]::GetTempPath()) "stale-files-$(Get-Date -Format yyyyMMdd-HHmmss).csv"
 
 $stale = Get-ChildItem -Path $targetDir -File -Recurse -ErrorAction SilentlyContinue |
     Where-Object { $_.LastWriteTime -lt $cutoff }
@@ -155,12 +151,12 @@ To test with synthetic data (as the Pester test does):
 
 ```powershell
 # Create a file and backdate its LastWriteTime
-$old = New-Item (Join-Path $env:TEMP 'old-test.log') -ItemType File -Force
+$old = New-Item (Join-Path ([System.IO.Path]::GetTempPath()) 'old-test.log') -ItemType File -Force
 Set-Content $old 'stale content'
 (Get-Item $old).LastWriteTime = (Get-Date).AddDays(-60)
 
 # Verify it shows up in the stale search
-$found = Get-ChildItem $env:TEMP -File |
+$found = Get-ChildItem ([System.IO.Path]::GetTempPath()) -File |
     Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) }
 $found.Name   # old-test.log
 ```
@@ -252,7 +248,7 @@ function Write-AppConfig {
 
 # --- Example usage ---
 
-$configPath = Join-Path $env:TEMP 'appconfig.json'
+$configPath = Join-Path ([System.IO.Path]::GetTempPath()) 'appconfig.json'
 
 # Create an initial config
 @{
@@ -287,10 +283,10 @@ $reloaded.Settings.Port   # 9090
 $bad = @{
     Version  = '1.0.0'
     Settings = @{ Port = 8080; Debug = $false }
-} | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $env:TEMP 'bad.json')
+} | ConvertTo-Json -Depth 5 | Set-Content (Join-Path ([System.IO.Path]::GetTempPath()) 'bad.json')
 
 try {
-    Read-AppConfig -Path (Join-Path $env:TEMP 'bad.json')
+    Read-AppConfig -Path (Join-Path ([System.IO.Path]::GetTempPath()) 'bad.json')
 } catch {
     Write-Host "Caught expected error: $_"
     # Output: Caught expected error: Missing required config key: 'AppName'
@@ -307,17 +303,15 @@ Port: 8080
 
 ### What to notice
 
-1. **-Depth 10 on ConvertTo-Json** -- the default depth is 2. Nested objects
-   deeper than 2 levels get serialized as their .NET type name
-   (`@{Port=8080}` becomes `"System.Collections.Hashtable"`) rather than
-   their actual content. For any config with more than one level of nesting,
-   use `-Depth 5` as a floor, `-Depth 10` if you're uncertain.
+1. **-Depth 10 on ConvertTo-Json** -- the default depth is 2. Values deeper
+   than the selected depth are truncated and current PowerShell versions emit
+   a warning. Choose a depth from the configuration schema instead of blindly
+   using an arbitrarily large value.
 
-2. **ConvertFrom-Json returns PSCustomObject, not Hashtable** -- this is
-   the source of the `$config.$key` property access syntax. If you need a
-   hashtable (for splatting, for example), cast with `ConvertFrom-Json |
-   ConvertTo-Hashtable` (a community function) or use `[hashtable]$config`
-   for flat objects. For deep objects, write a recursive converter.
+2. **ConvertFrom-Json returns PSCustomObject by default** -- this is the source
+   of the `$config.$key` property access syntax. When a hashtable is more
+   appropriate, PowerShell 7 provides `ConvertFrom-Json -AsHashtable`, which
+   recursively produces ordered hashtables.
 
 3. **Null-check pattern for nested keys** -- `$config.Settings.$key`
    navigates the object graph with dot notation. If `Settings` itself is
@@ -325,9 +319,10 @@ Port: 8080
    meaningful error. The solution checks `Settings` exists first, then
    checks nested keys. The order of validation matters.
 
-4. **Set-Content -Encoding UTF8** -- JSON files should always be UTF-8.
-   If you let PowerShell use its default, you're relying on the session
-   locale, which may not be UTF-8 on older Windows systems. Be explicit.
+4. **Set-Content -Encoding UTF8** -- JSON files should be UTF-8. PowerShell 7
+   already defaults to UTF-8 without a BOM, but the explicit parameter records
+   the file contract and protects copied examples from Windows PowerShell 5.1
+   defaults.
 
 5. **This is a foundation, not production code** -- a real config manager
    would add file locking for concurrent writes, schema versioning,

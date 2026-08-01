@@ -110,9 +110,11 @@ function Get-ServerReport {
 }
 ```
 
-`Write-Host` goes to the host (your terminal), not the output stream. Your callers never
-see it. `Write-Output` (or just a bare expression) goes into the stream. Know the
-difference and you'll never accidentally contaminate a pipeline.
+`Write-Host` writes to the information stream and is displayed by the host; it
+does not become ordinary success output for the next pipeline command.
+Information output can still be redirected with stream `6`. `Write-Output` (or
+just a bare expression) goes into the success stream. Know the difference and
+you'll avoid contaminating data pipelines.
 
 ---
 
@@ -171,7 +173,9 @@ Get-StatusCode -Url 'https://example.com' -Timeout 10  # Named also works
 Adding `[CmdletBinding()]` to a function promotes it from a basic function to an
 **advanced function** -- effectively a first-class cmdlet. This single decoration unlocks:
 
-- Automatic `-Verbose`, `-Debug`, `-ErrorAction`, `-WhatIf`, `-Confirm` support
+- Automatic common parameters such as `-Verbose`, `-Debug`, and `-ErrorAction`
+- `-WhatIf` and `-Confirm` when you opt in with
+  `[CmdletBinding(SupportsShouldProcess)]` and call `$PSCmdlet.ShouldProcess()`
 - `$PSCmdlet` variable for accessing the cmdlet runtime
 - `Write-Verbose` and `Write-Debug` output controlled by preference variables
 - Full parameter attribute support

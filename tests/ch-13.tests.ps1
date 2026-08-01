@@ -1,5 +1,5 @@
 #Requires -Version 7.4
-#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.5' }
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.7.1' }
 
 Describe "Chapter 13 - Objects & .NET" {
     It "Ex-1 (Simple): PSCustomObject has expected properties" {
@@ -10,7 +10,7 @@ Describe "Chapter 13 - Objects & .NET" {
             Status = 'Running'
         }
         $server.Name | Should -Be 'web01'
-        $server.PSObject.Properties.Count | Should -Be 4
+        @($server.PSObject.Properties).Count | Should -Be 4
         $server.PSObject.Properties.Name | Should -Contain 'Status'
     }
 

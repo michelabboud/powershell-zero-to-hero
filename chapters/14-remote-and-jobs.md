@@ -26,8 +26,8 @@ Here's the terrain we're covering:
 ## Part 1: PowerShell Remoting
 
 PowerShell Remoting (PSRemoting) lets you run commands on remote machines as
-if you were sitting at their keyboard. Under the hood it uses WS-Management
-(WSMan) over HTTP/HTTPS on Windows, or SSH on Linux/macOS/cross-platform.
+if you were sitting at their keyboard. WS-Management (WSMan) remoting is the
+Windows transport; PowerShell remoting over SSH is the cross-platform option.
 
 ### Enabling Remoting
 
@@ -41,13 +41,15 @@ Enable-PSRemoting -Force
 Get-Service WinRM
 ```
 
-On Linux/macOS or for SSH-based remoting (covered below), no separate
-enabling step is needed beyond having an SSH server running.
+For SSH-based remoting, configure an OpenSSH server **and** a PowerShell
+subsystem entry in `sshd_config`, then restart `sshd`. Merely installing an SSH
+server and `pwsh` is not sufficient. Microsoft's SSH remoting guide provides
+the platform-specific subsystem path and quoting rules.
 
-> **Note for this chapter:** All examples and tests use `localhost` as the
-> target. Real-world remoting to other machines requires network access,
-> firewall rules, and (on Windows) either domain trust or explicit credential
-> configuration. The mechanics are identical; only the target changes.
+> **Note for this chapter:** `-ComputerName` examples use Windows WSMan and
+> require WinRM configuration even for `localhost`. Exercises that call
+> `Invoke-Command` without a target are local invocation, not a remoting health
+> check.
 
 ---
 
@@ -57,27 +59,28 @@ enabling step is needed beyond having an SSH server running.
 ScriptBlock and a target; it runs the block there and returns the results here.
 
 ```powershell
-# Run a scriptblock on localhost (test remoting without a real remote host)
+# Windows WSMan: run a scriptblock on localhost
 Invoke-Command -ComputerName localhost -ScriptBlock {
     Get-Date
-    $env:COMPUTERNAME
+    [Environment]::MachineName
 }
 
 # Run on multiple machines at once -- results come back as objects
 $servers = @('web01', 'web02', 'db01')
 Invoke-Command -ComputerName $servers -ScriptBlock {
     [PSCustomObject]@{
-        Host   = $env:COMPUTERNAME
-        Uptime = (Get-Date) - (gcim Win32_OperatingSystem).LastBootUpTime
+        Host   = [Environment]::MachineName
+        Uptime = (Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
     }
 }
 ```
 
 When you target multiple machines, `Invoke-Command` fans out in parallel
 automatically (up to 32 concurrent connections by default, controlled by
-`-ThrottleLimit`). The results come back as objects with a `PSComputerName`
-property added automatically, so you always know which machine produced
-which result.
+`-ThrottleLimit`). Results are serialized/deserialized object copies with a
+`PSComputerName` property, so you can identify the source. Many instance
+methods aren't preserved across the remoting boundary; select the data you
+need on the remote side.
 
 ```powershell
 # Throttle to 5 concurrent connections
@@ -142,9 +145,9 @@ runs, and tears down. That overhead adds up. `New-PSSession` creates a
 # Create a persistent session
 $session = New-PSSession -ComputerName web01
 
-# Reuse the same session for multiple calls -- no reconnect overhead
+# Windows WSMan: reuse the same session for multiple calls
 Invoke-Command -Session $session -ScriptBlock { Get-Service }
-Invoke-Command -Session $session -ScriptBlock { Get-EventLog -LogName System -Newest 10 }
+Invoke-Command -Session $session -ScriptBlock { Get-WinEvent -LogName System -MaxEvents 10 }
 
 # Jump into it interactively
 Enter-PSSession -Session $session
@@ -172,7 +175,7 @@ Invoke-Command -Session $session -ScriptBlock { Get-ChildItem $deployPath }  # W
 
 PowerShell 7 supports SSH as a transport, which means cross-platform remoting
 works natively: Windows to Linux, Linux to Windows, anything to anything that
-runs an SSH server and PowerShell 7.
+runs an SSH server with a configured PowerShell subsystem and PowerShell 7.
 
 ```powershell
 # Connect to a Linux host via SSH
@@ -189,8 +192,10 @@ Enter-PSSession -HostName ubuntu-server -UserName deploy -SSHTransport
 ```
 
 Key differences from WSMan remoting:
-- Uses SSH key authentication by default (add `-KeyFilePath` for a specific key)
-- No `Enable-PSRemoting` required on the target -- just OpenSSH server + PowerShell 7
+- Authentication follows the SSH client configuration and server policy; use
+  `-KeyFilePath` to select a specific private key
+- No `Enable-PSRemoting` required on the target -- configure the PowerShell
+  subsystem in OpenSSH instead
 - Works through firewalls that already allow port 22
 - Does not support `-ComputerName` on `Invoke-Command`; use `-HostName` instead
 
@@ -200,9 +205,9 @@ Key differences from WSMan remoting:
 
 ### Session Configuration
 
-PowerShell remoting uses *session configurations* (also called endpoints) on
-the server side. The default endpoint is named `microsoft.powershell`. You can
-create custom endpoints to constrain what callers can do.
+Windows WSMan remoting uses *session configurations* (also called endpoints)
+on the server side. The default endpoint is named `microsoft.powershell`. You
+can create custom endpoints to constrain what callers can do.
 
 ```powershell
 # List available session configurations
@@ -276,10 +281,9 @@ Remove-Job $job
 ```
 
 **The process isolation cost:** Because `Start-Job` spawns a full child
-PowerShell process, each job carries ~50-100ms startup overhead and uses
-its own memory. For CPU-bound work that takes seconds or longer, this is
-negligible. For launching 100 tiny jobs that each take 10ms, the overhead
-dominates. Use thread jobs for that case (below).
+PowerShell process, startup and memory overhead are substantially higher than
+for a thread job. Measure your workload; many tiny jobs can spend more time on
+job setup than useful work.
 
 ```powershell
 # Jobs run in a child process -- modules must be imported there
@@ -294,13 +298,14 @@ $job = Start-Job -ScriptBlock {
 
 ### Start-ThreadJob: Lightweight Concurrent Work
 
-`Start-ThreadJob` (from the `ThreadJob` module, included in PS7) runs the
+`Start-ThreadJob` (from the `Microsoft.PowerShell.ThreadJob` module included
+with PowerShell 7.6) runs the
 ScriptBlock in a *thread* within the current process rather than a child
 process. Faster startup, lower overhead, shared process memory.
 
 ```powershell
-# Install if not present (usually pre-installed in PS7)
-# Install-Module ThreadJob -Scope CurrentUser
+# Install if not present
+# Install-PSResource Microsoft.PowerShell.ThreadJob -Scope CurrentUser
 
 # Thread jobs have the same API as regular jobs
 $job = Start-ThreadJob -ScriptBlock {
@@ -313,23 +318,26 @@ Remove-Job $job
 $result
 ```
 
-The API is identical to `Start-Job`. Swap one for the other without changing
-anything else. Use `Start-ThreadJob` when:
+The core lifecycle uses the same `Get-Job`, `Wait-Job`, `Receive-Job`, and
+`Remove-Job` commands as `Start-Job`. Use `Start-ThreadJob` when:
 - You need many short-lived concurrent tasks
 - Your work is I/O-bound (waiting on network calls, file reads)
 - You want lower memory overhead
 
 Use `Start-Job` when:
-- Your work genuinely needs process isolation (security boundary)
+- Your work benefits from process and fault isolation
 - You're concerned about runspace pollution from badly-behaved modules
-- You need the job to outlive the current session
+
+Neither local job type survives closing the parent PowerShell session. Use a
+scheduler, service, or disconnected remote session for durable work.
 
 ---
 
 ### ForEach-Object -Parallel: Inline Parallelism
 
 PowerShell 7 added `-Parallel` to `ForEach-Object`. It runs the ScriptBlock
-for each input object concurrently using thread jobs under the hood, but the
+for each input object concurrently using a runspace pool in the current
+process, but the
 syntax is a clean inline pipeline stage -- no `Start-Job`, no `Wait-Job`, no
 `Receive-Job` boilerplate.
 
@@ -348,9 +356,9 @@ $results = 1..10 | ForEach-Object -Parallel {
 $results | Sort-Object Input | Format-Table
 ```
 
-Notice the `Thread` column will show different thread IDs -- the items really
-are running concurrently. The results arrive in *completion order*, not input
-order. If you need input order, sort afterward.
+Notice the `Thread` column can show different thread IDs -- the items really
+are running concurrently. Output order isn't guaranteed to match input order.
+If order matters, include a key and sort afterward.
 
 **`$using:` is required here too:**
 
@@ -370,23 +378,21 @@ higher. Start with 5-10 and measure; don't just crank it to 100 and wonder
 why the server is unresponsive.
 
 ```powershell
-# Practical example: check disk space on a list of paths concurrently
-$paths = @('C:\', 'D:\', 'E:\', 'C:\Windows', 'C:\Program Files')
+# Cross-platform example: inspect several directories concurrently
+$paths = @($PSHOME, [System.IO.Path]::GetTempPath(), (Get-Location).Path)
 
-$diskReport = $paths | ForEach-Object -Parallel {
+$pathReport = $paths | ForEach-Object -Parallel {
     $path = $_
     if (Test-Path $path) {
-        $drive = Split-Path $path -Qualifier
-        $disk  = Get-PSDrive ($drive.TrimEnd(':'))
+        $item = Get-Item $path
         [PSCustomObject]@{
-            Path      = $path
-            FreeGB    = [math]::Round($disk.Free / 1GB, 2)
-            UsedGB    = [math]::Round($disk.Used / 1GB, 2)
+            Path         = $item.FullName
+            ChildEntries = @(Get-ChildItem $item.FullName -ErrorAction SilentlyContinue).Count
         }
     }
-} -ThrottleLimit 5
+} -ThrottleLimit 3
 
-$diskReport | Where-Object { $_ } | Format-Table
+$pathReport | Where-Object { $_ } | Format-Table
 ```
 
 ---
@@ -396,7 +402,7 @@ $diskReport | Where-Object { $_ } | Format-Table
 | | `Start-Job` | `Start-ThreadJob` | `ForEach-Object -Parallel` |
 |---|---|---|---|
 | Isolation | Full process | Thread | Thread |
-| Startup cost | High (~100ms) | Low (~1ms) | Low (~1ms) |
+| Startup cost | Highest | Lower | Lower |
 | Syntax | Explicit lifecycle | Explicit lifecycle | Inline pipeline |
 | Best for | Long tasks, isolation | Many short tasks | Batch processing |
 | `$using:` required | Yes | Yes | Yes |
@@ -410,7 +416,7 @@ The highest-leverage use of remoting and jobs together is the *fan-out*:
 send work to many targets in parallel, collect and aggregate the results.
 
 ```powershell
-# Fan-out: collect uptime from multiple servers with throttling
+# Fan-out: collect uptime from Windows WSMan/CIM hosts with throttling
 $servers = @('web01', 'web02', 'web03', 'db01', 'db02', 'cache01')
 
 $report = $servers | ForEach-Object -Parallel {
@@ -418,9 +424,9 @@ $report = $servers | ForEach-Object -Parallel {
     try {
         $os = Invoke-Command -ComputerName $server -ScriptBlock {
             [PSCustomObject]@{
-                Host    = $env:COMPUTERNAME
-                Uptime  = ((Get-Date) - (gcim Win32_OperatingSystem).LastBootUpTime).Days
-                OSBuild = (gcim Win32_OperatingSystem).BuildNumber
+                Host    = [Environment]::MachineName
+                Uptime  = ((Get-Date) - (Get-CimInstance Win32_OperatingSystem).LastBootUpTime).Days
+                OSBuild = (Get-CimInstance Win32_OperatingSystem).BuildNumber
             }
         } -ErrorAction Stop
         $os | Add-Member -MemberType NoteProperty -Name Status -Value 'OK' -PassThru
@@ -461,7 +467,7 @@ Use `Invoke-Command` with only a `-ScriptBlock` parameter (no
 `-ComputerName`) to run a block of code and return the computer name or
 hostname. Verify the result is not null or empty.
 
-**Stretch goal:** Pass a local variable into the ScriptBlock using `$using:`.
+**Stretch goal:** Pass a value with a `param()` block and `-ArgumentList`.
 
 ### [Ch-14, Ex-2] Normal: Background Job Lifecycle
 
@@ -498,14 +504,16 @@ the parallel block so a single failure does not abort the others.
 
 ## Key Takeaways
 
-- `Invoke-Command -ScriptBlock` runs code remotely (or locally); add
-  `-ComputerName` for remote targets, `-Session` for reuse.
+- `Invoke-Command -ScriptBlock` without a target invokes a block locally; add
+  a Windows WSMan `-ComputerName`, an SSH `-HostName`, or an existing
+  `-Session` for remoting.
 - `$using:` is how local variables enter a remote ScriptBlock or a
   `-Parallel` block. Without it, your variables are invisible.
 - `New-PSSession` creates a persistent, reusable connection that preserves
   state between calls and avoids per-call authentication overhead.
 - SSH remoting works cross-platform with `-HostName` and `-SSHTransport`;
-  no `Enable-PSRemoting` needed on the target.
+  configure a PowerShell subsystem in OpenSSH instead of running
+  `Enable-PSRemoting`.
 - `Start-Job` is process-isolated and heavy; `Start-ThreadJob` and
   `ForEach-Object -Parallel` are thread-based and lightweight.
 - `-ThrottleLimit` is not decorative. Tune it to your workload -- more

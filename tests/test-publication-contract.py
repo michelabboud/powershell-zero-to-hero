@@ -140,6 +140,25 @@ class InventoryContractTests(unittest.TestCase):
 
 
 class BuildPipelineTests(unittest.TestCase):
+    def test_pester_runner_is_canonical_and_ci_safe(self) -> None:
+        runner = ROOT / 'tests' / 'Run-AllTests.ps1'
+        self.assertTrue(runner.is_file())
+        self.assertFalse((ROOT / 'tests' / 'run-all.ps1').exists())
+
+        text = runner.read_text(encoding='utf-8')
+        self.assertIn('$PSScriptRoot', text)
+        self.assertIn('$config.Run.Exit = $true', text)
+        self.assertIn("ModuleVersion = '5.7.1'", text)
+
+        chapter_tests = sorted((ROOT / 'tests').glob('ch-*.tests.ps1'))
+        self.assertEqual(len(chapter_tests), 17)
+        for path in chapter_tests:
+            self.assertIn(
+                "ModuleVersion = '5.7.1'",
+                path.read_text(encoding='utf-8'),
+                path.name,
+            )
+
     def test_readme_documents_connected_markdown_to_pdf_pipeline(self) -> None:
         readme = (ROOT / 'README.md').read_text(encoding='utf-8')
         self.assertIn('python3 scripts/build_book.py --check', readme)

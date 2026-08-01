@@ -1,3 +1,6 @@
+#Requires -Version 7.4
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.7.1' }
+
 Describe "Chapter 01 - What Is PowerShell?" {
 
     It "Ex-1 (Simple): PSVersionTable has required keys" {

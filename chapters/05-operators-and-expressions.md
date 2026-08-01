@@ -61,6 +61,11 @@ $age -eq 31    # False
 
 By default, string comparisons in PowerShell are **case-insensitive**. This surprises people from case-sensitive ecosystems.
 
+Both the case-insensitive and case-sensitive comparison operators use .NET's
+invariant culture, so their results don't change with the machine's current
+locale. The `c` prefix changes case handling; it does not select an ordinal or
+byte-by-byte comparison.
+
 ```powershell
 'Hello' -eq 'hello'    # True  -- case-insensitive by default
 'Hello' -eq 'HELLO'    # True
@@ -111,7 +116,7 @@ Wildcard characters:
 
 ```powershell
 # Filter files by extension pattern
-Get-ChildItem C:\Windows -File |
+Get-ChildItem $PSHOME -File |
     Where-Object { $_.Name -like '*.log' }
 ```
 
@@ -314,6 +319,10 @@ $letters[0..4]         # @('a', 'b', 'c', 'd', 'e')
 }
 ```
 
+The range operator produces a materialized array. For a very large sequence,
+use a counter-based `for` loop so PowerShell doesn't build the entire range in
+memory before the loop begins.
+
 ---
 
 ## 10. Modern PowerShell: Ternary and Null-Coalescing
@@ -371,14 +380,17 @@ Max approval-stamps this pattern every code review. It's cleaner than four lines
 
 ## 11. Operator Precedence
 
-When multiple operators appear in one expression, PowerShell evaluates them in this order (highest to lowest):
+For the operators introduced in this chapter, PowerShell evaluates them in
+this order (highest to lowest):
 
 1. `()` -- parentheses (always first)
 2. Unary `-not`, `!`
 3. Arithmetic: `*`, `/`, `%`
 4. Arithmetic: `+`, `-`
 5. Comparison: `-eq`, `-ne`, `-gt`, `-lt`, `-ge`, `-le`, `-like`, `-match`, `-is`, `-as`
-6. Logical: `-and`, `-or`, `-xor`
+6. Logical AND: `-and`
+7. Logical XOR: `-xor`
+8. Logical OR: `-or`
 
 ```powershell
 # Without parens: comparison before -and

@@ -39,7 +39,7 @@
 | `ConvertTo-Json` | Converts objects to a JSON string |
 | `ConvertFrom-Json` | Parses a JSON string into `PSCustomObject` objects |
 | `Invoke-RestMethod` | Sends HTTP requests and auto-deserialises JSON/XML responses |
-| `Write-Host` | Writes directly to the console (bypasses the pipeline — use sparingly) |
+| `Write-Host` | Writes to the information stream for host display; it is not success-pipeline data |
 
 ---
 
@@ -60,11 +60,11 @@
 | Logical NOT | `-not` / `!` | `not` / `!` | `!` | `!` |
 | Bitwise AND | `-band` | `&` | `&` | `&` |
 | Bitwise OR | `-bor` | `\|` | `\|` | `\|` |
-| String contains | `-like '*x*'` | `'x' in s` | `[[ $s == *x* ]]` | `s.Contains("x")` |
+| Wildcard contains | `-like '*x*'` | `'x' in s` | `[[ $s == *x* ]]` | `s.Contains("x")` |
 | Regex match | `-match 'pattern'` | `re.search(...)` | `[[ $s =~ pattern ]]` | `Regex.IsMatch(...)` |
 | Case-insensitive eq | `-eq` (default) | `s.lower()==...` | n/a | `StringComparison.OrdinalIgnoreCase` |
 | Case-sensitive eq | `-ceq` | `==` | `==` | `==` |
-| Null / empty check | `$x -eq $null` | `x is None` | `[ -z "$x" ]` | `x == null` |
+| Null check | `$null -eq $x` | `x is None` | `[ -z "$x" ]` | `x == null` |
 | Range | `1..10` | `range(1, 11)` | `{1..10}` | `Enumerable.Range(1,10)` |
 
 ---
@@ -86,7 +86,7 @@ Get-ChildItem | Sort-Object Length -Descending
 # Sort by multiple properties
 Get-Process | Sort-Object -Property CPU, WorkingSet -Descending
 
-# Group and count
+# Group and count (Get-Service is Windows-only)
 Get-Service | Group-Object Status
 
 # Measure: count, sum, avg
@@ -110,7 +110,7 @@ Get-Process | Select-Object -ExpandProperty Company | Sort-Object -Unique
 # Pipeline with ForEach
 1..5 | ForEach-Object { "Item $_" }
 
-# Nested pipeline: find large log files and report size in MB
+# Nested pipeline: Windows path example
 Get-ChildItem C:\Logs -Recurse -Filter *.log |
     Where-Object { $_.Length -gt 10MB } |
     Select-Object FullName, @{N='SizeMB'; E={ [math]::Round($_.Length/1MB,2) }} |
@@ -213,4 +213,5 @@ Get-ChildItem -Recurse |
 ---
 
 > **Quick tip:** When in doubt, pipe to `Get-Member`. When still in doubt, pipe to `Select-Object *`.
-> When completely lost, pipe to `Out-GridView` and click around until it makes sense.
+> `Out-GridView` is optional and platform/module-dependent, so check `Get-Command Out-GridView`
+> before using it as an interactive fallback.

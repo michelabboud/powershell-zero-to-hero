@@ -1,9 +1,9 @@
 #Requires -Version 7.4
-#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.5' }
+#Requires -Modules @{ ModuleName = 'Pester'; ModuleVersion = '5.7.1' }
 
 Describe "Chapter 09 - Working with Files" {
     BeforeAll {
-        $testDir = Join-Path $env:TEMP "ps-ch09-test-$(Get-Random)"
+        $testDir = Join-Path ([System.IO.Path]::GetTempPath()) "ps-ch09-test-$(Get-Random)"
         New-Item -Path $testDir -ItemType Directory -Force | Out-Null
     }
 

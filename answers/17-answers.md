@@ -111,7 +111,7 @@ function Invoke-BuildLint {
 }
 
 # --- Test it manually ---
-$testDir = Join-Path $env:TEMP "ps-lint-$(Get-Random)"
+$testDir = Join-Path ([System.IO.Path]::GetTempPath()) "ps-lint-$(Get-Random)"
 New-Item $testDir -ItemType Directory -Force | Out-Null
 
 try {
@@ -142,11 +142,11 @@ bad.ps1  AvoidUsingWriteHost   Warning
 
 ### What to notice
 
-**Why `Write-Host` is flagged.** `Write-Host` writes directly to the host (the console)
-bypassing the PowerShell pipeline. That means its output cannot be captured with
-`$result = Invoke-BuildLint ...`, cannot be redirected to a file, and cannot be
-piped to another command. In a module or a reusable script function, this is almost
-always wrong. Use `Write-Output` for data, `Write-Verbose` for diagnostic messages
+**Why `Write-Host` is flagged.** Since PowerShell 5, `Write-Host` writes to the
+information stream, but its intent remains host-oriented display rather than
+pipeline data. In a module or reusable script function, it is usually wrong for
+results that callers need to capture or compose. Return objects for data, use
+`Write-Verbose` for diagnostic messages
 (enabled with `-Verbose`), `Write-Warning` for warnings, and `Write-Error` for errors.
 `Write-Host` has one legitimate home: interactive scripts that explicitly target the
 console (installers, menus, colorful status displays). Everywhere else, it's a code smell.
@@ -186,7 +186,7 @@ $workflow = @{
         test = @{
             'runs-on' = 'ubuntu-latest'
             steps     = @(
-                @{ uses = 'actions/checkout@v4' },
+                @{ uses = 'actions/checkout@v7' },
                 @{
                     name  = 'Run Pester'
                     shell = 'pwsh'
@@ -201,23 +201,16 @@ $workflow = @{
 $workflow.name                         # PowerShell CI
 $workflow.jobs.test.'runs-on'          # ubuntu-latest
 $workflow.jobs.test.steps.Count        # 2
-$workflow.jobs.test.steps[0].uses      # actions/checkout@v4
+$workflow.jobs.test.steps[0].uses      # actions/checkout@v7
 $workflow.jobs.test.steps[1].shell     # pwsh
 
-# Serialize to YAML for actual use (requires powershell-yaml module)
-# $workflow | ConvertTo-Yaml | Set-Content .github/workflows/ci.yml
+# Treat this as an object-model exercise. Maintain production workflow YAML
+# directly so the reviewed file is exactly what GitHub interprets.
 ```
 
-To use the workflow in a real repository, serialize it to YAML. The `powershell-yaml`
-module handles this:
-
-```powershell
-Install-Module powershell-yaml -Force -Scope CurrentUser
-
-$yaml = $workflow | ConvertTo-Yaml
-New-Item -Path '.github/workflows' -ItemType Directory -Force | Out-Null
-$yaml | Set-Content '.github/workflows/ci.yml' -Encoding UTF8
-```
+For a real repository, write and review `.github/workflows/ci.yml` directly.
+Generic YAML serializers can change quoting or scalar interpretation; always
+validate the resulting workflow with GitHub's tooling before relying on it.
 
 ### Expected Output
 
@@ -225,7 +218,7 @@ $yaml | Set-Content '.github/workflows/ci.yml' -Encoding UTF8
 PowerShell CI
 ubuntu-latest
 2
-actions/checkout@v4
+actions/checkout@v7
 pwsh
 ```
 
@@ -243,9 +236,10 @@ infrastructure use YAML 1.2 where this is not an issue, but if you serialize thi
 hashtable and see `'on': true` in the output, your YAML library is quoting the key as
 a safety measure. That's fine -- GitHub Actions handles it correctly.
 
-**`actions/checkout@v4`.** Always pin action versions to a specific tag (`@v4`), not
-`@main` or `@latest`. Unpinned actions can change behavior silently between runs.
-For security-sensitive workflows, pin to a full commit SHA instead of a tag.
+**`actions/checkout@v7`.** A major-version tag is easier to maintain than
+`@main` or `@latest`, but it can still move. For the strongest supply-chain
+control, pin a reviewed full commit SHA and use dependency automation to
+propose updates.
 
 **Cross-platform `pwsh`.** Specifying `shell: pwsh` on a GitHub Actions step uses the
 PowerShell 7 binary (`pwsh`) regardless of the runner OS. On `ubuntu-latest` and

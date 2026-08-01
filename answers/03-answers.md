@@ -156,12 +156,18 @@ using pipeline cmdlets and multiple `Get-*` sources.
 ```powershell
 $health = [PSCustomObject]@{
     ProcessCount  = (Get-Process).Count
-    ServiceCount  = (Get-Service).Count
+    ThreadCount   = (
+        Get-Process |
+            ForEach-Object { $_.Threads.Count } |
+            Measure-Object -Sum
+    ).Sum
     Uptime        = (Get-Uptime).TotalHours
     UsedMemoryMB  = [math]::Round(
         (Get-Process | Measure-Object WorkingSet64 -Sum).Sum / 1MB
     )
-    TempFileCount = (Get-ChildItem $env:TEMP -ErrorAction SilentlyContinue).Count
+    TempFileCount = (
+        Get-ChildItem ([System.IO.Path]::GetTempPath()) -ErrorAction SilentlyContinue
+    ).Count
 }
 
 $health
@@ -171,7 +177,7 @@ $health
 
 ```
 ProcessCount : 247
-ServiceCount : 312
+ThreadCount  : 1842
 Uptime       : 72.4533
 UsedMemoryMB : 8934
 TempFileCount: 142
@@ -198,7 +204,7 @@ Several things are happening that deserve attention:
    is built on .NET, and you can reach into it whenever you need to. No
    `Import-Module` required for core framework types.
 
-4. **-ErrorAction SilentlyContinue** -- the `$env:TEMP` directory might
+4. **-ErrorAction SilentlyContinue** -- the platform-neutral temporary directory might
    contain items you don't have permission to enumerate. Without this flag,
    you'd get red error text mixed into your clean output. In production
    scripts, you'd want `-ErrorAction Stop` with a try/catch instead, but

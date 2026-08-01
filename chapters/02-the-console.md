@@ -151,13 +151,17 @@ Write-Host "Profile loaded from: $PROFILE" -ForegroundColor DarkGray
 ```
 
 Save, close, and open a new PowerShell window. Your greeting should appear.
-If it doesn't, check that your execution policy allows scripts:
+If it doesn't, check that your execution policy allows scripts on Windows:
 
 ```powershell
 Get-ExecutionPolicy
 # If "Restricted":
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
+
+> **Windows only:** execution policies are enforced on Windows. On Linux and
+> macOS, `Set-ExecutionPolicy` reports that the operation is unsupported; use
+> normal filesystem permissions and trusted-source review instead.
 
 ## PSReadLine
 
@@ -279,7 +283,7 @@ whether the file actually exists using `Test-Path`.
 
 Create a profile script that:
 1. Sets an alias `ll` that maps to `Get-ChildItem`
-2. Sets an alias `np` that maps to `notepad`
+2. Sets an alias `edit` that maps to an editor available on your platform
 3. Displays a greeting message when the shell starts
 
 ### [Ch-02, Ex-3] Configure PSReadLine (Advanced)

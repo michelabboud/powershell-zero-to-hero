@@ -27,10 +27,9 @@ caught
 
 ### What to notice
 
-`try`/`catch` is an **expression** in PowerShell, not just a statement. You can assign the
-return value of the entire `try`/`catch` construct to a variable. The value of the block is
-the last expression evaluated inside whichever branch ran -- the `try` body on success, the
-`catch` body on error.
+`try`/`catch` can contribute success output to an assignment in PowerShell.
+Every unredirected success-stream value from the branch that runs is captured;
+this example emits one string, so `$result` is `'caught'`.
 
 Dividing by zero in PowerShell throws a `System.DivideByZeroException`, which is a
 terminating error. That's why `catch` fires here without needing `-ErrorAction Stop`. Integer
@@ -206,7 +205,7 @@ function Write-ErrorLog {
 
 # --- Usage ---
 
-$logPath = Join-Path $env:TEMP "ps-error-log-$(Get-Random).json"
+$logPath = Join-Path ([System.IO.Path]::GetTempPath()) "ps-error-log-$(Get-Random).json"
 
 try {
     # Trigger a real terminating error

@@ -56,10 +56,9 @@ containment: `'not-an-email'` would match `'^[\w.+-]+'` because the local-part
 pattern appears at the start of the string. Anchors enforce that the entire
 string must conform to the pattern, which is what validation requires.
 
-`\w` in .NET regex matches `[a-zA-Z0-9_]`. The `+` after the character class
-means "one or more." The local part (`[\w.+-]+`) allows letters, digits,
-underscores, dots, plus signs, and hyphens -- the characters permitted by
-common email conventions. This pattern is a useful heuristic, not an RFC 5321
+`\w` in .NET regex is Unicode-aware and includes letters, decimal digits,
+connector punctuation, and combining marks. The `+` after the character class
+means "one or more." This pattern is a useful heuristic, not an RFC 5321
 compliance checker. For production email validation, send a confirmation
 message; don't try to out-clever the RFC with regex.
 

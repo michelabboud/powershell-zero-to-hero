@@ -12,14 +12,14 @@ survive.
 
 ```powershell
 param(
-    [string]$TargetDir = $env:TEMP,
+    [string]$TargetDir = [System.IO.Path]::GetTempPath(),
     [int]   $DaysOld   = 7
 )
 
 $cutoff = (Get-Date).AddDays(-$DaysOld)
 
-$stale = Get-ChildItem -Path $TargetDir -File |
-    Where-Object { $_.LastWriteTime -lt $cutoff }
+$stale = @(Get-ChildItem -Path $TargetDir -File |
+    Where-Object { $_.LastWriteTime -lt $cutoff })
 
 if ($stale.Count -eq 0) {
     Write-Host "Nothing to clean in $TargetDir (threshold: $DaysOld days)"
@@ -35,7 +35,7 @@ Write-Host "Done."
 
 ```powershell
 # Setup
-$dir = Join-Path $env:TEMP 'ch16-ex1-test'
+$dir = Join-Path ([System.IO.Path]::GetTempPath()) 'ch16-ex1-test'
 New-Item $dir -ItemType Directory -Force | Out-Null
 
 $old = Join-Path $dir 'old-temp.log'
@@ -109,16 +109,18 @@ $stamp     = Get-Date -Format 'yyyy-MM-dd_HHmmss'
 $backupDir = Join-Path $BackupRoot $stamp
 
 Write-Host "Creating backup: $backupDir"
-New-Item $BackupRoot -ItemType Directory -Force | Out-Null
-Copy-Item -Path $SourceDir -Destination $backupDir -Recurse -Force
+if ($PSCmdlet.ShouldProcess($backupDir, "Copy '$SourceDir'")) {
+    New-Item $BackupRoot -ItemType Directory -Force | Out-Null
+    Copy-Item -Path $SourceDir -Destination $backupDir -Recurse -Force
 
-$fileCount = (Get-ChildItem $backupDir -File -Recurse).Count
-Write-Host "Backup complete. $fileCount file(s) copied."
+    $fileCount = @(Get-ChildItem $backupDir -File -Recurse).Count
+    Write-Host "Backup complete. $fileCount file(s) copied."
+}
 
 # 2. Prune old backups
 $cutoff = (Get-Date).AddDays(-$RetainDays)
-$old    = Get-ChildItem $BackupRoot -Directory |
-    Where-Object { $_.CreationTime -lt $cutoff }
+$old    = @(Get-ChildItem $BackupRoot -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.LastWriteTime -lt $cutoff })
 
 if ($old.Count -gt 0) {
     Write-Host "Pruning $($old.Count) backup(s) older than $RetainDays days..."
@@ -136,7 +138,7 @@ if ($old.Count -gt 0) {
 ### Testing it manually
 
 ```powershell
-$base   = Join-Path $env:TEMP 'ch16-ex2-test'
+$base   = Join-Path ([System.IO.Path]::GetTempPath()) 'ch16-ex2-test'
 $src    = Join-Path $base 'source'
 $bkRoot = Join-Path $base 'backups'
 New-Item $src -ItemType Directory -Force | Out-Null
@@ -172,17 +174,15 @@ would nest the source directory inside it. This is the "create before copy"
 subtlety: the behaviour differs based on whether the destination path exists
 at copy time. When in doubt, let `Copy-Item` create the destination.
 
-**Retention uses `CreationTime`, not `LastWriteTime`** for backup folders.
-You want to measure when the backup was *made*, not when a file inside it
-was last modified. Using `LastWriteTime` on a directory returns the time
-its *directory entry* was last updated, which can be misleading. `CreationTime`
-is unambiguous for this purpose.
+**Retention needs a timestamp contract.** This example uses a controlled,
+date-stamped directory and `LastWriteTime`. File-system creation times are not
+portable provenance: copying or restoring a directory can change them. A more
+formal backup system should parse its controlled folder name or record backup
+metadata explicitly, then test that policy.
 
-**`SupportsShouldProcess` on a backup script** might seem surprising, but
-the prune step is a bulk destructive operation. Running the script with
-`-WhatIf` lets you verify which old backups would be removed before
-committing. Attach `-WhatIf` to every script that deletes anything, even
-if deletion is not the primary purpose.
+**`SupportsShouldProcess` covers every mutation.** Both the copy and prune
+steps call `ShouldProcess`, so `-WhatIf` performs neither operation. Adding
+the attribute alone is not enough; each state change needs a gate.
 
 ---
 
@@ -195,11 +195,15 @@ least 5 properties. Hostname must be populated. Process count must be > 0.
 
 ```powershell
 $inventory = [PSCustomObject]@{
-    Hostname  = $env:COMPUTERNAME
+    Hostname  = [Environment]::MachineName
     OS        = $PSVersionTable.OS
     PSVersion = $PSVersionTable.PSVersion.ToString()
     Processes = (Get-Process).Count
-    Services  = (Get-Service).Count
+    Services  = if (Get-Command Get-Service -ErrorAction SilentlyContinue) {
+        @(Get-Service).Count
+    } else {
+        $null
+    }
     Uptime    = [math]::Round((Get-Uptime).TotalHours, 1)
     MemoryMB  = [math]::Round(
         (Get-Process | Measure-Object WorkingSet64 -Sum).Sum / 1MB
@@ -210,15 +214,15 @@ $inventory = [PSCustomObject]@{
 $inventory | Format-List
 ```
 
-### For a full HTML report (production version)
+### For a full HTML report (Windows-only version)
 
 ```powershell
-# Extend the object with CIM data for richer output
+# The Win32 CIM providers and Get-Service calls require Windows.
 $os    = Get-CimInstance Win32_OperatingSystem
 $disks = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3"
 
 $inventory = [PSCustomObject]@{
-    Hostname   = $env:COMPUTERNAME
+    Hostname   = [Environment]::MachineName
     OS         = $os.Caption
     OSBuild    = $os.BuildNumber
     PSVersion  = $PSVersionTable.PSVersion.ToString()
@@ -236,8 +240,9 @@ $html = $inventory.PSObject.Properties |
     ConvertTo-Html -Title "Inventory: $($inventory.Hostname)" -Fragment |
     Out-String
 
-Set-Content (Join-Path $env:TEMP 'inventory.html') $html -Encoding UTF8
-Write-Host "Report: $(Join-Path $env:TEMP 'inventory.html')"
+$reportPath = Join-Path ([System.IO.Path]::GetTempPath()) 'inventory.html'
+Set-Content $reportPath $html -Encoding UTF8
+Write-Host "Report: $reportPath"
 ```
 
 ### Expected Output
@@ -245,7 +250,7 @@ Write-Host "Report: $(Join-Path $env:TEMP 'inventory.html')"
 ```
 Hostname   : WEB01
 OS         : Microsoft Windows 11 Pro
-PSVersion  : 7.4.6
+PSVersion  : 7.6.4
 Processes  : 187
 Services   : 243
 Uptime     : 48.3
@@ -268,7 +273,7 @@ PS/OS version data. For deeper OS details (total memory, build number,
 last boot), `Get-CimInstance Win32_OperatingSystem` is the right tool.
 The two complement each other.
 
-**`Get-Uptime`** (PS7+) is a clean one-liner. On Windows PowerShell 5.1,
+**`Get-Uptime`** is available in modern PowerShell and is a clean one-liner. On Windows PowerShell 5.1,
 you need `(Get-Date) - (gcim Win32_OperatingSystem).LastBootUpTime`. Know
 which version your environment runs before deploying scripts that use PS7+
 cmdlets.
@@ -355,7 +360,7 @@ if ($drift.Count -eq 0) {
 }
 ```
 
-### With real services (production usage)
+### With real services (Windows-only production usage)
 
 ```powershell
 $watchList = @('WinRM', 'EventLog', 'Spooler', 'BITS', 'wuauserv')

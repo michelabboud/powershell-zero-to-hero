@@ -17,11 +17,12 @@ the "What to notice" section to understand *why* it works.
 
 ## Verification
 
-Every solution in this booklet has been tested with Pester 5.5+ on
-PowerShell 7.4+ (Windows and Linux). Run the tests yourself:
+Every numbered solution in this booklet has been tested with Pester 6.0.1 on
+PowerShell 7.6.4, with Pester 5.7.1 compatibility retained. Platform-specific
+examples are explicitly labeled. Run the tests yourself:
 
 ```powershell
-pwsh ./tests/run-all.ps1
+pwsh ./tests/Run-AllTests.ps1
 ```
 
 ## Difficulty Labels

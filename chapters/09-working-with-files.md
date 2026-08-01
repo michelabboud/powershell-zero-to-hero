@@ -23,8 +23,10 @@ Here's the mental map you need:
 
 ### Get-Content
 
-`Get-Content` reads a file and returns each line as a string object in an
-array. That last part matters: you get a collection, not a wall of text.
+`Get-Content` writes one string object per line to the pipeline. When you assign
+the result, PowerShell gives you a scalar string for one line and an array for
+multiple lines; wrap the command in `@(...)` when your code always needs an
+array.
 
 ```powershell
 # Read the whole file
@@ -39,8 +41,8 @@ Get-Content ./server.log -Wait -Tail 5
 # Read as a single string (the -Raw switch)
 $text = Get-Content ./config.json -Raw
 
-# Specify encoding (UTF-8 without BOM is the sane default)
-Get-Content ./legacy.txt -Encoding UTF8
+# Specify encoding explicitly when a file contract requires it
+Get-Content ./data.txt -Encoding UTF8
 ```
 
 The `-Raw` switch is your best friend when feeding file content to
@@ -55,7 +57,7 @@ will ruin your Tuesday.
 | | `Set-Content` | `Out-File` |
 |---|---|---|
 | Input type | Strings / objects via `.ToString()` | Anything (uses formatter) |
-| Default encoding | UTF-8 (no BOM) | UTF-16LE (BOM) |
+| Default encoding in PowerShell 7 | UTF-8 (no BOM) | UTF-8 (no BOM) |
 | Use for | Data files, scripts, configs | Formatted text output |
 | Overwrites? | Yes | Yes (default) |
 
@@ -233,7 +235,7 @@ PowerShell handle the platform details.
 
 ```powershell
 # Safe cross-platform path construction
-$logFile = Join-Path $env:TEMP "myapp" "run.log"
+$logFile = Join-Path ([System.IO.Path]::GetTempPath()) "myapp" "run.log"
 # Result: C:\Users\sam\AppData\Local\Temp\myapp\run.log
 
 # Useful in scripts that need to run on both Windows and Linux
@@ -329,9 +331,8 @@ $config.Settings.Port
 $config.Settings.Port = 9090
 $config | ConvertTo-Json -Depth 10 | Set-Content ./config.json
 
-# -Depth matters: default is 2. Nested objects beyond depth 2
-# get serialized as their type name, not their actual content.
-# Always use -Depth 5 or higher for real configs.
+# -Depth matters: default is 2. Deeper values are truncated and
+# ConvertTo-Json emits a warning. Choose a depth that matches your schema.
 ```
 
 ```powershell
@@ -406,7 +407,7 @@ explicit beats implicit in production scripts.
 ```powershell
 $cutoff   = (Get-Date).AddDays(-30)
 $target   = "C:\Logs\old"
-$report   = Join-Path $env:TEMP "deletion-report-$(Get-Date -Format yyyyMMdd).csv"
+$report   = Join-Path ([System.IO.Path]::GetTempPath()) "deletion-report-$(Get-Date -Format yyyyMMdd).csv"
 
 # Find candidates and write report first
 Get-ChildItem $target -File -Recurse -ErrorAction SilentlyContinue |
