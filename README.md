@@ -27,12 +27,19 @@ python3 scripts/build_book.py --edition all --format all
 Use `--edition main|answers|all` and `--format pdf|html|all` to select a
 subset. The generated Markdown and Typst bodies are written under `build/`;
 final documents and their copied image assets are written under `dist/`.
-Both directories are ignored by Git.
+Both directories are ignored by Git and exclusively managed by this command.
+Each generating run safely clears stale contents, then leaves only the selected
+edition/format outputs and their current image assets. The build refuses
+symlinked managed roots or components and never writes the historical root PDF.
 
 `book.json` is the only source for book metadata, source order, edition names,
 cover assets, and output names. Markdown in `chapters/`, `appendices/`, and
 `answers/` remains the canonical editable content. The tracked Typst
 entrypoint and `book/template.typ` provide layout only.
+Edition output names must be portable extensionless basenames. Local images may
+use inline, full-reference, collapsed-reference, shortcut-reference, or
+empty-alt Markdown forms, but every image must resolve under `assets/images/`;
+external and escaping image targets are rejected.
 
 Michel Abboud is the book author. Generated editions retain this exact creation
 credit:

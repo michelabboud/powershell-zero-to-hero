@@ -10,22 +10,47 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Literal
 
 if __package__:
-    from .assemble_book import BookConfig, assemble, load_config, write_edition
+    from .assemble_book import (
+        BookConfig,
+        assemble,
+        load_config,
+        validate_source_manifest,
+        write_edition,
+    )
+    from .managed_outputs import (
+        ManagedPathError,
+        managed_path,
+        reset_managed_roots,
+        validate_managed_tree,
+    )
+    from .validate_repository import markdown_target_parts, parse_markdown_targets
 else:
     from assemble_book import (  # pyright: ignore[reportImplicitRelativeImport]
         BookConfig,
         assemble,
         load_config,
+        validate_source_manifest,
         write_edition,
+    )
+    from managed_outputs import (  # pyright: ignore[reportImplicitRelativeImport]
+        ManagedPathError,
+        managed_path,
+        reset_managed_roots,
+        validate_managed_tree,
+    )
+    from validate_repository import (  # pyright: ignore[reportImplicitRelativeImport]
+        markdown_target_parts,
+        parse_markdown_targets,
     )
 
 
 Edition = Literal['main', 'answers']
 OutputFormat = Literal['pdf', 'html']
-IMAGE_RE = re.compile(r'!\[[^\]\n]*\]\((assets/images/[^)\s]+)\)')
+OUTPUT_BASENAME_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]*$')
 
 
 class BuildError(RuntimeError):
@@ -59,7 +84,7 @@ def _load_edition(data: object, edition: Edition) -> EditionConfig:
     if not isinstance(data, dict):
         raise BuildError(f"book.json edition '{edition}' must be an object.")
     try:
-        return EditionConfig(
+        config = EditionConfig(
             title=data['title'],
             output_name=data['output'],
             front_cover=data['frontCover'],
@@ -69,6 +94,14 @@ def _load_edition(data: object, edition: Edition) -> EditionConfig:
         raise BuildError(
             f"book.json edition '{edition}' is missing '{error.args[0]}'.",
         ) from None
+    if (
+        not isinstance(config.output_name, str)
+        or OUTPUT_BASENAME_RE.fullmatch(config.output_name) is None
+    ):
+        raise BuildError(
+            f"book.json edition '{edition}' output must be a safe extensionless basename.",
+        )
+    return config
 
 
 def load_manifest(root: Path) -> BuildManifest:
@@ -76,6 +109,7 @@ def load_manifest(root: Path) -> BuildManifest:
     path = root / 'book.json'
     data = json.loads(path.read_text(encoding='utf-8'))
     book = load_config(root)
+    validate_source_manifest(root, book)
     if book.author != 'Michel Abboud':
         raise BuildError('book.json author must be Michel Abboud.')
     if book.credit != 'Created by Visual Forge':
@@ -120,12 +154,45 @@ def run_checked(command: list[str], cwd: Path) -> None:
     subprocess.run(command, cwd=cwd, check=True)
 
 
-def _copy_asset(root: Path, relative: str) -> None:
-    source = root / relative
+def _canonical_image_path(raw_target: str) -> str:
+    path_part, _fragment = markdown_target_parts(raw_target)
+    path = PurePosixPath(path_part)
+    if (
+        not path_part
+        or path.is_absolute()
+        or '\\' in path_part
+        or '..' in path.parts
+        or len(path.parts) < 3
+        or path.parts[:2] != ('assets', 'images')
+    ):
+        raise BuildError(f'image path must stay under assets/images: {raw_target}')
+    return path.as_posix()
+
+
+def _image_source(root: Path, relative: str) -> Path:
+    source = root.joinpath(*PurePosixPath(relative).parts)
+    current = root
+    for part in PurePosixPath(relative).parts:
+        current /= part
+        if current.is_symlink():
+            raise BuildError(f'missing build asset: {relative}')
+    try:
+        source.resolve(strict=True).relative_to(root.resolve(strict=True))
+    except (OSError, ValueError):
+        raise BuildError(f'missing build asset: {relative}') from None
     if not source.is_file():
         raise BuildError(f'missing build asset: {relative}')
-    destination = root / 'dist' / relative
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    return source
+
+
+def _copy_asset(root: Path, relative: str) -> None:
+    canonical = _canonical_image_path(relative)
+    source = _image_source(root, canonical)
+    try:
+        destination = managed_path(root, 'dist', canonical)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+    except ManagedPathError as error:
+        raise BuildError(str(error)) from None
     shutil.copyfile(source, destination)
 
 
@@ -135,18 +202,23 @@ def _copy_referenced_images(
     manifest: BuildManifest,
     editions: tuple[Edition, ...],
 ) -> None:
-    referenced = {
-        match
-        for markdown_path in markdown_paths
-        for match in IMAGE_RE.findall(markdown_path.read_text(encoding='utf-8'))
-    }
+    referenced: set[str] = set()
+    for markdown_path in markdown_paths:
+        parsed = parse_markdown_targets(markdown_path.read_text(encoding='utf-8'))
+        if parsed.duplicate_definition:
+            raise BuildError('Markdown contains a duplicate reference definition.')
+        if parsed.missing_definition:
+            raise BuildError('Markdown reference definition is unavailable.')
+        referenced.update(
+            _canonical_image_path(target.raw)
+            for target in parsed.targets
+            if target.is_image
+        )
     for edition in editions:
         edition_config = manifest.edition(edition)
-        referenced.add(edition_config.front_cover)
-        referenced.add(edition_config.back_cover)
+        referenced.add(_canonical_image_path(edition_config.front_cover))
+        referenced.add(_canonical_image_path(edition_config.back_cover))
     for relative in sorted(referenced):
-        if not relative.startswith('assets/images/') or '..' in Path(relative).parts:
-            raise BuildError(f'image path must stay under assets/images: {relative}')
         _copy_asset(root, relative)
 
 
@@ -253,11 +325,14 @@ def build(
     """Build selected editions/formats and return path-sorted final outputs."""
     check_tools()
     manifest = load_manifest(root)
-    markdown_paths = tuple(
-        write_edition(root, manifest.book, edition)
-        for edition in editions
-    )
-    (root / 'dist').mkdir(parents=True, exist_ok=True)
+    try:
+        reset_managed_roots(root, 'build', 'dist')
+        markdown_paths = tuple(
+            write_edition(root, manifest.book, edition)
+            for edition in editions
+        )
+    except ManagedPathError as error:
+        raise BuildError(str(error)) from None
     _copy_referenced_images(root, markdown_paths, manifest, editions)
     outputs: list[Path] = []
     for edition, markdown in zip(editions, markdown_paths, strict=True):
@@ -272,8 +347,24 @@ def validate_build(root: Path) -> None:
     """Validate tools, metadata, sources, and static build assets read-only."""
     check_tools()
     manifest = load_manifest(root)
-    assemble(root, manifest.book, 'main')
-    assemble(root, manifest.book, 'answers')
+    try:
+        for directory in ('build', 'dist'):
+            validate_managed_tree(root, directory)
+    except ManagedPathError as error:
+        raise BuildError(str(error)) from None
+    assembled = (
+        assemble(root, manifest.book, 'main'),
+        assemble(root, manifest.book, 'answers'),
+    )
+    for markdown in assembled:
+        parsed = parse_markdown_targets(markdown)
+        if parsed.duplicate_definition:
+            raise BuildError('Markdown contains a duplicate reference definition.')
+        if parsed.missing_definition:
+            raise BuildError('Markdown reference definition is unavailable.')
+        for target in parsed.targets:
+            if target.is_image:
+                _copy_asset_check(root, target.raw)
     for edition in ('main', 'answers'):
         edition_config = manifest.edition(edition)
         _copy_asset_check(root, edition_config.front_cover)
@@ -284,10 +375,8 @@ def validate_build(root: Path) -> None:
 
 
 def _copy_asset_check(root: Path, relative: str) -> None:
-    if not relative.startswith('assets/images/') or '..' in Path(relative).parts:
-        raise BuildError(f'image path must stay under assets/images: {relative}')
-    if not (root / relative).is_file():
-        raise BuildError(f'missing build asset: {relative}')
+    canonical = _canonical_image_path(relative)
+    _image_source(root, canonical)
 
 
 def _editions(value: str) -> tuple[Edition, ...]:

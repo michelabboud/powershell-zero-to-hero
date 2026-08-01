@@ -84,6 +84,37 @@ class RepositoryFixture:
         self._write('LICENSE', 'MIT License\n\nCopyright (c) 2026 Michel Abboud\n')
         self._write('VERSION', '1.1.0\n')
         self._write('assets/images/example.png', b'fixture image')
+        self._write(
+            'book.json',
+            json.dumps(
+                {
+                    'title': 'Fixture Book',
+                    'author': 'Michel Abboud',
+                    'version': '1.1.0',
+                    'credit': 'Created by Visual Forge',
+                    'creationTimestamp': 1785542400,
+                    'chapters': [f'chapters/{name}' for name in CHAPTERS],
+                    'appendices': [f'appendices/{name}' for name in APPENDICES],
+                    'answers': [
+                        'answers/00-how-to-use-answers.md',
+                        *[f'answers/{number:02d}-answers.md' for number in range(1, 18)],
+                    ],
+                    'editions': {
+                        edition: {
+                            'title': 'Fixture Book',
+                            'output': f'fixture-{edition}',
+                            'frontCover': 'assets/images/example.png',
+                            'backCover': 'assets/images/example.png',
+                        }
+                        for edition in ('main', 'answers')
+                    },
+                },
+                indent=2,
+            )
+            + '\n',
+        )
+        self._write('book/template.typ', '#let placeholder = none\n')
+        self._write('powershell-zero-to-hero.typ', '#let placeholder = none\n')
         pdf = self._write('powershell-zero-to-hero.pdf', b'historical pdf')
 
         for number, name in enumerate(CHAPTERS):
@@ -181,6 +212,26 @@ class ValidatorTests(unittest.TestCase):
     def run_validator(self, *extra: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, str(VALIDATOR), str(self.fixture.root), *extra],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    def run_build_check(self) -> subprocess.CompletedProcess[str]:
+        probe = (
+            'from pathlib import Path; import sys; '
+            'sys.path.insert(0, sys.argv[1]); '
+            'import build_book; '
+            'raise SystemExit(build_book.main(["--check"], root=Path(sys.argv[2])))'
+        )
+        return subprocess.run(
+            [
+                sys.executable,
+                '-c',
+                probe,
+                str(ROOT / 'scripts'),
+                str(self.fixture.root),
+            ],
             text=True,
             capture_output=True,
             check=False,
@@ -284,6 +335,66 @@ class ValidatorTests(unittest.TestCase):
 
         self.assert_issue(result, 'appendix-missing', missing)
 
+    def test_manifest_omission_is_rejected_by_validator_and_build_check(self) -> None:
+        manifest = self.fixture.root / 'book.json'
+        data = json.loads(manifest.read_text(encoding='utf-8'))
+        omitted = data['chapters'].pop(5)
+        manifest.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
+        self.fixture.refresh_destination_inventory()
+
+        validation = self.run_validator()
+        build_check = self.run_build_check()
+
+        self.assert_issue(validation, 'chapter-unexpected', omitted)
+        self.assertEqual(build_check.returncode, 1)
+        self.assertIn(omitted, build_check.stderr)
+
+    def test_manifest_extra_source_is_rejected_by_validator_and_build_check(self) -> None:
+        manifest = self.fixture.root / 'book.json'
+        data = json.loads(manifest.read_text(encoding='utf-8'))
+        extra = 'chapters/99-missing.md'
+        data['chapters'].append(extra)
+        manifest.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
+        self.fixture.refresh_destination_inventory()
+
+        validation = self.run_validator()
+        build_check = self.run_build_check()
+
+        self.assert_issue(validation, 'chapter-missing', extra)
+        self.assertEqual(build_check.returncode, 1)
+        self.assertIn(extra, build_check.stderr)
+
+    def test_manifest_duplicate_source_is_rejected_by_validator_and_build_check(self) -> None:
+        manifest = self.fixture.root / 'book.json'
+        data = json.loads(manifest.read_text(encoding='utf-8'))
+        duplicate = data['chapters'][1]
+        data['chapters'].insert(2, duplicate)
+        manifest.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
+        self.fixture.refresh_destination_inventory()
+
+        validation = self.run_validator()
+        build_check = self.run_build_check()
+
+        self.assert_issue(validation, 'book-manifest-invalid', 'book.json')
+        self.assertEqual(build_check.returncode, 1)
+        self.assertIn('duplicate', build_check.stderr)
+
+    def test_reordered_manifest_is_authoritative_for_validator_and_build_check(self) -> None:
+        manifest = self.fixture.root / 'book.json'
+        data = json.loads(manifest.read_text(encoding='utf-8'))
+        data['chapters'][1], data['chapters'][2] = (
+            data['chapters'][2],
+            data['chapters'][1],
+        )
+        manifest.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
+        self.fixture.refresh_destination_inventory()
+
+        validation = self.run_validator()
+        build_check = self.run_build_check()
+
+        self.assertEqual(validation.returncode, 0, validation.stdout + validation.stderr)
+        self.assertEqual(build_check.returncode, 0, build_check.stdout + build_check.stderr)
+
     def test_reports_broken_markdown_image_link(self) -> None:
         chapter = self.fixture.root / 'chapters/01-what-is-powershell.md'
         chapter.write_text(
@@ -311,6 +422,21 @@ class ValidatorTests(unittest.TestCase):
         result = self.run_validator()
 
         self.assert_issue(result, 'path-escape', 'chapters/01-what-is-powershell.md')
+
+    def test_rejects_external_markdown_images(self) -> None:
+        chapter = self.fixture.root / 'chapters/01-what-is-powershell.md'
+        chapter.write_text(
+            chapter.read_text(encoding='utf-8').replace(
+                'assets/images/example.png',
+                'https://example.invalid/private.png',
+            ),
+            encoding='utf-8',
+        )
+        self.fixture.refresh_destination_inventory()
+
+        result = self.run_validator()
+
+        self.assert_issue(result, 'image-path', 'chapters/01-what-is-powershell.md')
 
     def test_reports_broken_local_link_without_echoing_target(self) -> None:
         marker = 'sensitive-missing-target'

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "destinationDescriptor": "public-standalone-working-tree",
-  "capturedAt": "2026-08-01T09:30:02Z",
+  "capturedAt": "2026-08-01T10:04:50Z",
   "excludedPaths": [
     "docs/destination-inventory.json",
     "docs/source-inventory.json"
@@ -24,8 +24,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 2353,
-      "sha256": "5aed529a5448be46250baaa00ef3d8e95aad25cdfc21b1b457667c08d7840adb"
+      "bytes": 2907,
+      "sha256": "68f0939320905af4c05d1fd12bb7f8e5b95b127f135abc12e1b09c54a0e2424e"
     },
     {
       "path": "VERSION",
@@ -929,8 +929,8 @@
     },
     {
       "path": "docs/provenance.md",
-      "bytes": 2068,
-      "sha256": "dc9ee443a58c9e974d2d34091e45f4496a0bd54f407859fd78033ad13c89b173"
+      "bytes": 2521,
+      "sha256": "63c7c310cd2c5ea2e5cfd1db978045d61db41537d62da126ac84da7a7148f1ec"
     },
     {
       "path": "powershell-zero-to-hero.pdf",
@@ -944,18 +944,23 @@
     },
     {
       "path": "scripts/assemble_book.py",
-      "bytes": 3662,
-      "sha256": "9388b1120fd67a50c8b786920ced58c51a638210b27fda903b99197a7b9a802f"
+      "bytes": 6936,
+      "sha256": "20f74ffcc8d1edb3210d3ef0f2e861f34da51038830365c6b8538f330a0ccf38"
     },
     {
       "path": "scripts/build_book.py",
-      "bytes": 11270,
-      "sha256": "76155d951bbe7db1e1422a85c059a6b72d22193e008596977568c7448022f91a"
+      "bytes": 14325,
+      "sha256": "08d519e17d52fb73f877c6b6ebf025a51fec0a7a3d4c40ecd9d715217ce85cb0"
+    },
+    {
+      "path": "scripts/managed_outputs.py",
+      "bytes": 3897,
+      "sha256": "8a8d3d2eec3ea359c0a671501ed83d29dc7dd5a6b88ded24a529856e741e5caf"
     },
     {
       "path": "scripts/validate_repository.py",
-      "bytes": 34188,
-      "sha256": "e49e17f4ce0c03842f395aae11fdc8fb4d7de0078f01127e57b7dc30c2ca3530"
+      "bytes": 34494,
+      "sha256": "88461f5dd8de78c30fdc5e2e86c319aff5d845f96fb973fcd36b50111ec91e39"
     },
     {
       "path": "tests/ch-01.tests.ps1",
@@ -1049,18 +1054,18 @@
     },
     {
       "path": "tests/test-publication-contract.py",
-      "bytes": 7781,
-      "sha256": "41f7b189820e7f67e368974df51b1e476567c61bde30196f83eb63fafe8cc3db"
+      "bytes": 8207,
+      "sha256": "59ca11f40c77b072e2d7f919aac22dab1cc686db6b88ab1426ceaa790693308f"
     },
     {
       "path": "tests/test_build_book.py",
-      "bytes": 23842,
-      "sha256": "f0eb01551cbcc72a3639a7b0bcbdfc0f8cf86bc1a0449667bcf0ca70935ebe83"
+      "bytes": 36513,
+      "sha256": "e87a24cfa1a90d33f8965f73306fc2511f23164dc392165d1a3d2f70c1a9d3e4"
     },
     {
       "path": "tests/test_validate_repository.py",
-      "bytes": 27200,
-      "sha256": "8c2a7971273f9e6f445983ed9107f72eb52fb36285be639bf02910af8e280cad"
+      "bytes": 32502,
+      "sha256": "24c2138dbb2f157d25add185c28af972ceea7eb2e4f3f48beaa555abf4d7841d"
     }
   ]
 }

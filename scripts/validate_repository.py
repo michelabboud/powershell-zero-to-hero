@@ -8,12 +8,25 @@ import hashlib
 import json
 import os
 import re
+import sys
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 from urllib.parse import unquote
+
+if __package__:
+    from .assemble_book import BookConfig, load_config, source_manifest_issues
+else:
+    _SCRIPT_DIRECTORY = str(Path(__file__).resolve().parent)
+    if _SCRIPT_DIRECTORY not in sys.path:
+        sys.path.insert(0, _SCRIPT_DIRECTORY)
+    from assemble_book import (  # pyright: ignore[reportImplicitRelativeImport]
+        BookConfig,
+        load_config,
+        source_manifest_issues,
+    )
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -23,31 +36,23 @@ class ValidationIssue:
     message: str
 
 
-CHAPTERS = (
-    '00-preface.md',
-    '01-what-is-powershell.md',
-    '02-the-console.md',
-    '03-commands-and-cmdlets.md',
-    '04-variables-and-types.md',
-    '05-operators-and-expressions.md',
-    '06-control-flow.md',
-    '07-functions-and-scripts.md',
-    '08-the-pipeline-deep-dive.md',
-    '09-working-with-files.md',
-    '10-error-handling.md',
-    '11-regex-and-text.md',
-    '12-modules-and-packages.md',
-    '13-objects-and-dotnet.md',
-    '14-remote-and-jobs.md',
-    '15-active-directory.md',
-    '16-automation-recipes.md',
-    '17-devops-and-cicd.md',
-)
-APPENDICES = (
-    'A-cheat-sheet.md',
-    'B-common-errors.md',
-    'C-from-bash-to-powershell.md',
-)
+@dataclass(frozen=True, slots=True, order=True)
+class MarkdownTarget:
+    """One parsed inline or reference-style Markdown target."""
+
+    raw: str
+    is_image: bool
+
+
+@dataclass(frozen=True, slots=True)
+class MarkdownParse:
+    """Deterministic Markdown targets plus reference-definition diagnostics."""
+
+    targets: tuple[MarkdownTarget, ...]
+    duplicate_definition: bool
+    missing_definition: bool
+
+
 DEFAULT_DESTINATION_INVENTORY = 'docs/destination-inventory.json'
 SOURCE_INVENTORY = 'docs/source-inventory.json'
 HISTORICAL_PDF = 'powershell-zero-to-hero.pdf'
@@ -433,23 +438,29 @@ def _validate_source_inventory(root: Path, issues: list[ValidationIssue]) -> Non
         )
 
 
-def _validate_declared_sources(root: Path, issues: list[ValidationIssue]) -> None:
-    declared_groups = (
-        ('chapter', 'chapters', CHAPTERS),
-        ('appendix', 'appendices', APPENDICES),
-    )
-    for kind, directory, declared in declared_groups:
-        expected = {f'{directory}/{name}' for name in declared}
-        source_directory = root / directory
-        actual = {
-            f'{directory}/{path.name}'
-            for path in source_directory.glob('*.md')
-            if path.is_file() and not path.is_symlink()
-        } if source_directory.is_dir() else set()
-        for path in sorted(expected - actual):
-            issues.append(_issue(f'{kind}-missing', path, f'Declared {kind} source is missing.'))
-        for path in sorted(actual - expected):
-            issues.append(_issue(f'{kind}-unexpected', path, f'Undeclared {kind} source is present.'))
+def _load_book_config(root: Path, issues: list[ValidationIssue]) -> BookConfig | None:
+    try:
+        return load_config(root)
+    except (FileNotFoundError, KeyError, TypeError, UnicodeError, ValueError, json.JSONDecodeError):
+        issues.append(
+            _issue('book-manifest-invalid', 'book.json', 'Book manifest is unavailable or invalid.'),
+        )
+        return None
+
+
+def _validate_declared_sources(
+    root: Path,
+    config: BookConfig,
+    issues: list[ValidationIssue],
+) -> None:
+    for source_issue in source_manifest_issues(root, config):
+        issues.append(
+            _issue(
+                f'{source_issue.kind}-{source_issue.status}',
+                source_issue.path,
+                f'Manifest {source_issue.kind} source is {source_issue.status}.',
+            ),
+        )
 
 
 def _content_without_fences(text: str) -> str:
@@ -550,7 +561,7 @@ def _validate_anchors(root: Path, markdown: dict[str, str], issues: list[Validat
             )
 
 
-def _split_local_target(target: str) -> tuple[str, str]:
+def markdown_target_parts(target: str) -> tuple[str, str]:
     target = target[1:-1] if target.startswith('<') and target.endswith('>') else target
     without_fragment, separator, fragment = target.partition('#')
     path = without_fragment.split('?', 1)[0]
@@ -585,6 +596,42 @@ def _overlaps(span: tuple[int, int], occupied: list[tuple[int, int]]) -> bool:
     return any(span[0] < existing[1] and existing[0] < span[1] for existing in occupied)
 
 
+def parse_markdown_targets(text: str) -> MarkdownParse:
+    """Parse supported inline, full, collapsed, and shortcut Markdown targets."""
+    visible = _content_without_fences(text)
+    definitions, reference_content, duplicate_definition = _reference_definitions(visible)
+    link_content = _content_without_inline_code(reference_content)
+    targets = {
+        MarkdownTarget(match.group('target'), match.group('image') is not None)
+        for match in MARKDOWN_LINK_RE.finditer(link_content)
+    }
+    occupied: list[tuple[int, int]] = []
+    missing_definition = False
+    for match in REFERENCE_USE_RE.finditer(link_content):
+        occupied.append(match.span())
+        link_text = match.group('text')
+        label = match.group('label')
+        if not link_text and not label:
+            continue
+        normalized = _normalize_reference_label(label or link_text)
+        target = definitions.get(normalized)
+        if target is None:
+            missing_definition = True
+            continue
+        targets.add(MarkdownTarget(target, match.group('image') is not None))
+    for match in SHORTCUT_REFERENCE_RE.finditer(link_content):
+        if _overlaps(match.span(), occupied):
+            continue
+        target = definitions.get(_normalize_reference_label(match.group('label')))
+        if target is not None:
+            targets.add(MarkdownTarget(target, match.group('image') is not None))
+    return MarkdownParse(
+        targets=tuple(sorted(targets)),
+        duplicate_definition=duplicate_definition,
+        missing_definition=missing_definition,
+    )
+
+
 def _validate_markdown_target(
     root: Path,
     source: Path,
@@ -595,9 +642,11 @@ def _validate_markdown_target(
     anchors_by_path: dict[str, set[str]],
     issues: list[ValidationIssue],
 ) -> None:
-    path_part, fragment = _split_local_target(raw_target)
+    path_part, fragment = markdown_target_parts(raw_target)
     lowered = path_part.casefold()
     if any(lowered.startswith(f'{scheme}:') for scheme in EXTERNAL_SCHEMES):
+        if is_image:
+            issues.append(_issue('image-path', relative, 'Markdown images must be repository-local.'))
         return
     if path_part.startswith(('/', '\\', '~')) or WINDOWS_ABSOLUTE_RE.match(path_part):
         issues.append(_issue('absolute-path', relative, 'Markdown target must be repository-relative.'))
@@ -639,11 +688,9 @@ def _validate_links(root: Path, markdown: dict[str, str], issues: list[Validatio
     anchors_by_path = {path: set(_anchors(text)) for path, text in markdown.items()}
     image_root = (root / 'assets' / 'images').resolve(strict=False)
     for relative, text in sorted(markdown.items()):
-        visible = _content_without_fences(text)
         source = root / relative
-        definitions, reference_content, duplicate_definition = _reference_definitions(visible)
-        link_content = _content_without_inline_code(reference_content)
-        if duplicate_definition:
+        parsed = parse_markdown_targets(text)
+        if parsed.duplicate_definition:
             issues.append(
                 _issue(
                     'reference-definition-duplicate',
@@ -651,124 +698,96 @@ def _validate_links(root: Path, markdown: dict[str, str], issues: list[Validatio
                     'Markdown document defines a reference label more than once.',
                 ),
             )
-        occupied: list[tuple[int, int]] = []
-        for match in MARKDOWN_LINK_RE.finditer(link_content):
-            _validate_markdown_target(
-                root,
-                source,
-                relative,
-                match.group('target'),
-                match.group('image') is not None,
-                image_root,
-                anchors_by_path,
-                issues,
+        if parsed.missing_definition:
+            issues.append(
+                _issue(
+                    'reference-definition-missing',
+                    relative,
+                    'Markdown reference definition is unavailable.',
+                ),
             )
-
-        reference_targets: set[tuple[str, bool]] = set()
-        for match in REFERENCE_USE_RE.finditer(link_content):
-            occupied.append(match.span())
-            text = match.group('text')
-            label = match.group('label')
-            if not text and not label:
-                continue
-            label = label or text
-            normalized = _normalize_reference_label(label)
-            target = definitions.get(normalized)
-            if target is None:
-                issues.append(
-                    _issue(
-                        'reference-definition-missing',
-                        relative,
-                        'Markdown reference definition is unavailable.',
-                    ),
-                )
-                continue
-            reference_targets.add((target, match.group('image') is not None))
-        for match in SHORTCUT_REFERENCE_RE.finditer(link_content):
-            if _overlaps(match.span(), occupied):
-                continue
-            target = definitions.get(_normalize_reference_label(match.group('label')))
-            if target is not None:
-                reference_targets.add((target, match.group('image') is not None))
-        for raw_target, is_image in sorted(reference_targets):
+        for target in parsed.targets:
             _validate_markdown_target(
                 root,
                 source,
                 relative,
-                raw_target,
-                is_image,
+                target.raw,
+                target.is_image,
                 image_root,
                 anchors_by_path,
                 issues,
             )
 
 
-def _validate_answer_coverage(root: Path, issues: list[ValidationIssue]) -> None:
-    preface_answer = root / 'answers' / '00-how-to-use-answers.md'
-    if not preface_answer.is_file() or preface_answer.is_symlink():
-        issues.append(
-            _issue('answer-missing', 'answers/00-how-to-use-answers.md', 'Preface answer guide is missing.'),
-        )
+def _validate_answer_coverage(
+    root: Path,
+    config: BookConfig,
+    issues: list[ValidationIssue],
+) -> None:
+    chapter_exercises: dict[str, set[tuple[str, str]]] = {}
+    for chapter_relative in config.chapters:
+        chapter_text = _read_text(root / chapter_relative)
+        if chapter_text is None:
+            continue
+        exercises = set(EXERCISE_RE.findall(_content_without_fences(chapter_text)))
+        for chapter_id, exercise in exercises:
+            chapter_exercises.setdefault(chapter_id, set()).add((chapter_id, exercise))
 
-    expected_answers = {'00-how-to-use-answers.md'} | {
-        f'{number:02d}-answers.md' for number in range(1, 18)
-    }
+    answer_sets: dict[str, set[tuple[str, str]]] = {}
+    answer_owner: dict[str, str] = {}
+    for answer_relative in config.answers:
+        answer_text = _read_text(root / answer_relative)
+        if answer_text is None:
+            continue
+        visible = _content_without_fences(answer_text)
+        parsed = set(ANSWER_RE.findall(visible))
+        answer_sets[answer_relative] = parsed
+        for chapter_id, _exercise in parsed:
+            answer_owner.setdefault(chapter_id, answer_relative)
+        title = re.search(r'^#\s+Chapter\s+(\d{2})\b', visible, re.MULTILINE)
+        if title is not None:
+            answer_owner[title.group(1)] = answer_relative
+
     expected_tests = {'run-all.ps1'} | {
-        f'ch-{number:02d}.tests.ps1' for number in range(1, 18)
+        f'ch-{chapter_id}.tests.ps1' for chapter_id in chapter_exercises
     }
-    answer_directory = root / 'answers'
     test_directory = root / 'tests'
-    actual_answers = {
-        path.name for path in answer_directory.glob('*.md') if path.is_file() and not path.is_symlink()
-    } if answer_directory.is_dir() else set()
     actual_tests = {
         path.name for path in test_directory.glob('*.ps1') if path.is_file() and not path.is_symlink()
     } if test_directory.is_dir() else set()
-    for name in sorted(actual_answers - expected_answers):
-        issues.append(_issue('answer-unexpected', f'answers/{name}', 'Unmapped answer file is present.'))
     for name in sorted(actual_tests - expected_tests):
         issues.append(_issue('test-unexpected', f'tests/{name}', 'Unmapped test file is present.'))
 
-    for number, chapter_name in enumerate(CHAPTERS[1:], start=1):
-        chapter_path = root / 'chapters' / chapter_name
-        answer_relative = f'answers/{number:02d}-answers.md'
-        test_relative = f'tests/ch-{number:02d}.tests.ps1'
-        answer_path = root / answer_relative
+    all_answers = set().union(*answer_sets.values()) if answer_sets else set()
+    for chapter_id, exercises in sorted(chapter_exercises.items()):
+        answer_relative = answer_owner.get(chapter_id, 'book.json')
+        test_relative = f'tests/ch-{chapter_id}.tests.ps1'
         test_path = root / test_relative
-        chapter_text = _read_text(chapter_path)
-        answer_text = _read_text(answer_path)
         test_text = _read_text(test_path)
-        if answer_text is None:
-            issues.append(_issue('answer-missing', answer_relative, 'Chapter answer mapping is missing.'))
         if test_text is None:
             issues.append(_issue('test-missing', test_relative, 'Chapter test mapping is missing.'))
-        if chapter_text is None:
-            continue
-        exercises = {
-            (chapter, exercise)
-            for chapter, exercise in EXERCISE_RE.findall(_content_without_fences(chapter_text))
-            if chapter == f'{number:02d}'
-        }
-        if answer_text is not None:
-            answers = set(ANSWER_RE.findall(_content_without_fences(answer_text)))
-            for exercise in sorted(exercises - answers):
-                issues.append(
-                    _issue('answer-exercise-missing', answer_relative, 'Answer coverage is incomplete.'),
-                )
-            for exercise in sorted(answers - exercises):
-                issues.append(
-                    _issue('answer-exercise-unexpected', answer_relative, 'Answer has no chapter exercise.'),
-                )
+        for _exercise in sorted(exercises - all_answers):
+            issues.append(
+                _issue('answer-exercise-missing', answer_relative, 'Answer coverage is incomplete.'),
+            )
         if test_text is not None:
-            tests = {(f'{number:02d}', exercise) for exercise in TEST_RE.findall(test_text)}
-            for exercise in sorted(exercises - tests):
+            tests = {(chapter_id, exercise) for exercise in TEST_RE.findall(test_text)}
+            for _exercise in sorted(exercises - tests):
                 issues.append(
                     _issue('test-exercise-missing', test_relative, 'Test coverage is incomplete.'),
                 )
-            for exercise in sorted(tests - exercises):
+            for _exercise in sorted(tests - exercises):
                 issues.append(
                     _issue('test-exercise-unexpected', test_relative, 'Test has no chapter exercise.'),
                 )
+    all_exercises = set().union(
+        *chapter_exercises.values(),
+    ) if chapter_exercises else set()
+    for answer_relative, answers in sorted(answer_sets.items()):
+        for _answer in sorted(answers - all_exercises):
+            issues.append(
+                _issue('answer-exercise-unexpected', answer_relative, 'Answer has no chapter exercise.'),
+            )
 
 
 def _text_candidates(root: Path) -> Iterable[tuple[str, str]]:
@@ -879,8 +898,10 @@ def validate_repository(
 
     _validate_destination_inventory(resolved_root, resolved_manifest, issues)
     _validate_source_inventory(resolved_root, issues)
-    _validate_declared_sources(resolved_root, issues)
-    _validate_answer_coverage(resolved_root, issues)
+    config = _load_book_config(resolved_root, issues)
+    if config is not None:
+        _validate_declared_sources(resolved_root, config, issues)
+        _validate_answer_coverage(resolved_root, config, issues)
     markdown = {
         relative: text
         for relative, text in _text_candidates(resolved_root)

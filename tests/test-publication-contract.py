@@ -8,6 +8,7 @@ import json
 import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -151,21 +152,34 @@ class BuildPipelineTests(unittest.TestCase):
         missing = [tool for tool in required_tools if shutil.which(tool) is None]
         self.assertFalse(missing, f'missing build tools: {missing}')
 
-        chapter = ROOT / 'chapters' / '00-preface.md'
-        markdown = ROOT / 'build' / 'main.md'
-        typst_body = ROOT / 'build' / 'main-body.typ'
-        pdf = ROOT / 'dist' / 'powershell-zero-to-hero.pdf'
-        historical_pdf = ROOT / 'powershell-zero-to-hero.pdf'
-        source_inventory = load_inventory(SOURCE_INVENTORY)
-        historical_entry = next(
-            entry
-            for entry in source_inventory['files']
-            if entry['path'] == 'powershell-zero-to-hero.pdf'
-        )
-        historical_before = sha256(historical_pdf)
-        original = chapter.read_text(encoding='utf-8')
-
-        try:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            fixture_root = Path(temporary_directory) / 'repository'
+            shutil.copytree(
+                ROOT,
+                fixture_root,
+                ignore=shutil.ignore_patterns(
+                    '.git',
+                    '.mypy_cache',
+                    '.pytest_cache',
+                    '.ruff_cache',
+                    '__pycache__',
+                    'build',
+                    'dist',
+                    'test-results',
+                ),
+            )
+            chapter = fixture_root / 'chapters' / '00-preface.md'
+            typst_body = fixture_root / 'build' / 'main-body.typ'
+            pdf = fixture_root / 'dist' / 'powershell-zero-to-hero.pdf'
+            historical_pdf = fixture_root / 'powershell-zero-to-hero.pdf'
+            source_inventory = load_inventory(fixture_root / 'docs' / 'source-inventory.json')
+            historical_entry = next(
+                entry
+                for entry in source_inventory['files']
+                if entry['path'] == 'powershell-zero-to-hero.pdf'
+            )
+            historical_before = sha256(historical_pdf)
+            original = chapter.read_text(encoding='utf-8')
             chapter.write_text(f'{original}\n\n{FLOW_MARKER}\n', encoding='utf-8')
             subprocess.run(
                 [
@@ -176,7 +190,7 @@ class BuildPipelineTests(unittest.TestCase):
                     '--format',
                     'pdf',
                 ],
-                cwd=ROOT,
+                cwd=fixture_root,
                 check=True,
                 stdout=subprocess.DEVNULL,
             )
@@ -195,11 +209,6 @@ class BuildPipelineTests(unittest.TestCase):
             self.assertEqual(pdf_text.count('Created by Visual Forge'), 1)
             self.assertEqual(historical_before, historical_entry['sha256'])
             self.assertEqual(sha256(historical_pdf), historical_before)
-        finally:
-            chapter.write_text(original, encoding='utf-8')
-            markdown.unlink(missing_ok=True)
-            typst_body.unlink(missing_ok=True)
-            pdf.unlink(missing_ok=True)
 
 
 if __name__ == '__main__':

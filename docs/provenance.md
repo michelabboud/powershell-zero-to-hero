@@ -39,4 +39,9 @@ The tracked `powershell-zero-to-hero.typ` entrypoint and `book/template.typ`
 provide layout without duplicating manifest metadata. Generated Markdown and
 Typst bodies belong in ignored `build/`; final documents and copied image
 assets belong in ignored `dist/`. Neither location may replace the historical
-root PDF.
+root PDF. These two ignored directories are exclusively build-managed: each
+generating run rejects symlinked roots/components, removes stale contents, and
+retains only the requested outputs plus currently referenced local images.
+Configured output names are safe extensionless basenames, and Markdown images
+must resolve beneath `assets/images/` regardless of whether they use inline,
+full-reference, collapsed-reference, shortcut-reference, or empty-alt syntax.

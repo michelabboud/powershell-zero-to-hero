@@ -21,6 +21,59 @@ ASSEMBLER = ROOT / 'scripts' / 'assemble_book.py'
 BUILDER = ROOT / 'scripts' / 'build_book.py'
 
 
+def write_build_fixture(
+    root: Path,
+    *,
+    chapter_markdown: str = '# Chapter\n',
+    main_output: str = 'fixture-main',
+    answers_output: str = 'fixture-answers',
+) -> dict[str, object]:
+    """Write the smallest complete manifest-backed build fixture."""
+    manifest: dict[str, object] = {
+        'title': 'Fixture Book',
+        'author': 'Michel Abboud',
+        'version': '1.1.0',
+        'credit': 'Created by Visual Forge',
+        'creationTimestamp': 1785542400,
+        'chapters': ['chapters/01.md'],
+        'appendices': ['appendices/A.md'],
+        'answers': ['answers/01.md'],
+        'editions': {
+            'main': {
+                'title': 'Fixture Book',
+                'output': main_output,
+                'frontCover': 'assets/images/front.webp',
+                'backCover': 'assets/images/back.webp',
+            },
+            'answers': {
+                'title': 'Fixture Answers',
+                'output': answers_output,
+                'frontCover': 'assets/images/front.webp',
+                'backCover': 'assets/images/back.webp',
+            },
+        },
+    }
+    files: dict[str, str | bytes] = {
+        'book.json': json.dumps(manifest),
+        'VERSION': '1.1.0\n',
+        'chapters/01.md': chapter_markdown,
+        'appendices/A.md': '# Appendix\n',
+        'answers/01.md': '# Answers\n',
+        'assets/images/front.webp': b'front cover',
+        'assets/images/back.webp': b'back cover',
+        'powershell-zero-to-hero.typ': '#let placeholder = none\n',
+        'book/template.typ': '#let placeholder = none\n',
+    }
+    for relative, content in files.items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(content, bytes):
+            path.write_bytes(content)
+        else:
+            path.write_text(content, encoding='utf-8')
+    return manifest
+
+
 def load_module(name: str, path: Path) -> ModuleType:
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
@@ -161,13 +214,25 @@ class AssembleBookTests(unittest.TestCase):
             self.assertEqual(first.read_text(encoding='utf-8'), '# Chapter\n')
 
     def test_cli_emits_both_manifest_editions_under_build(self) -> None:
-        outputs = (ROOT / 'build' / 'main.md', ROOT / 'build' / 'answers.md')
-        for output in outputs:
-            output.unlink(missing_ok=True)
-        try:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            write_build_fixture(root)
+            outputs = (root / 'build' / 'main.md', root / 'build' / 'answers.md')
+            probe = (
+                'from pathlib import Path; import sys; '
+                'sys.path.insert(0, sys.argv[1]); '
+                'import assemble_book; '
+                'raise SystemExit(assemble_book.main(["--edition", "all"], root=Path(sys.argv[2])))'
+            )
             result = subprocess.run(
-                [sys.executable, 'scripts/assemble_book.py', '--edition', 'all'],
-                cwd=ROOT,
+                [
+                    sys.executable,
+                    '-c',
+                    probe,
+                    str(ROOT / 'scripts'),
+                    str(root),
+                ],
+                cwd=root,
                 text=True,
                 capture_output=True,
                 check=False,
@@ -179,9 +244,6 @@ class AssembleBookTests(unittest.TestCase):
                 result.stdout.splitlines(),
                 ['build/answers.md', 'build/main.md'],
             )
-        finally:
-            for output in outputs:
-                output.unlink(missing_ok=True)
 
 
 class BuildBookTests(unittest.TestCase):
@@ -246,6 +308,10 @@ class BuildBookTests(unittest.TestCase):
                 encoding='utf-8',
             )
             (root / 'VERSION').write_text('1.1.0\n', encoding='utf-8')
+            for relative in ('chapters/01.md', 'appendices/A.md', 'answers/01.md'):
+                source = root / relative
+                source.parent.mkdir(parents=True, exist_ok=True)
+                source.write_text('# Fixture\n', encoding='utf-8')
 
             loaded = module.load_manifest(root)
 
@@ -291,6 +357,91 @@ class BuildBookTests(unittest.TestCase):
                 r'^book\.json author must be Michel Abboud\.$',
             ):
                 module.load_manifest(root)
+
+    def test_manifest_rejects_unsafe_output_basenames(self) -> None:
+        module = load_module('build_book_output_basename_test', BUILDER)
+        unsafe = (
+            '',
+            '.',
+            '..',
+            '../powershell-zero-to-hero',
+            '/absolute',
+            'nested/name',
+            'nested\\name',
+            'already.pdf',
+            'has.dot',
+            'control\nname',
+            'control\x1bname',
+        )
+        for index, output_name in enumerate(unsafe):
+            with self.subTest(output_name=output_name):
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    root = Path(temporary_directory)
+                    write_build_fixture(root, main_output=output_name)
+                    with self.assertRaisesRegex(
+                        module.BuildError,
+                        r"^book\.json edition 'main' output must be a safe extensionless basename\.$",
+                    ):
+                        module.load_manifest(root)
+
+    def test_manifest_accepts_portable_output_basenames(self) -> None:
+        module = load_module('build_book_valid_output_basename_test', BUILDER)
+        for output_name in ('book', 'book-1', 'Book_2026'):
+            with self.subTest(output_name=output_name):
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    root = Path(temporary_directory)
+                    write_build_fixture(root, main_output=output_name)
+                    self.assertEqual(
+                        module.load_manifest(root).main.output_name,
+                        output_name,
+                    )
+
+    def test_escape_output_is_rejected_without_touching_historical_sentinel(self) -> None:
+        module = load_module('build_book_escape_sentinel_test', BUILDER)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            workspace = Path(temporary_directory)
+            root = workspace / 'repository'
+            root.mkdir()
+            sentinel = workspace / 'powershell-zero-to-hero.pdf'
+            sentinel.write_bytes(b'byte-identical historical sentinel')
+            before = hashlib.sha256(sentinel.read_bytes()).hexdigest()
+            write_build_fixture(root, main_output='../powershell-zero-to-hero')
+
+            with self.assertRaisesRegex(module.BuildError, r'safe extensionless basename'):
+                module.build(root, editions=('main',), formats=('pdf',))
+
+            self.assertEqual(hashlib.sha256(sentinel.read_bytes()).hexdigest(), before)
+            self.assertEqual(sentinel.read_bytes(), b'byte-identical historical sentinel')
+
+    def test_build_rejects_symlinked_managed_roots_and_components(self) -> None:
+        module = load_module('build_book_symlink_containment_test', BUILDER)
+        cases = ('build', 'dist', 'dist/assets')
+        for relative in cases:
+            with self.subTest(relative=relative):
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    workspace = Path(temporary_directory)
+                    root = workspace / 'repository'
+                    root.mkdir()
+                    write_build_fixture(root)
+                    outside = workspace / 'outside'
+                    outside.mkdir()
+                    link = root / relative
+                    link.parent.mkdir(parents=True, exist_ok=True)
+                    link.symlink_to(outside, target_is_directory=True)
+
+                    with mock.patch.object(module, 'check_tools'):
+                        with self.assertRaisesRegex(
+                            module.BuildError,
+                            r'^managed output path must not contain symlinks:',
+                        ):
+                            module.build(root, editions=('main',), formats=())
+                        with self.assertRaisesRegex(
+                            module.BuildError,
+                            r'^managed output path must not contain symlinks:',
+                        ):
+                            module.validate_build(root)
+
+                    self.assertEqual(tuple(outside.iterdir()), ())
 
     def test_repository_manifest_declares_complete_public_book(self) -> None:
         manifest_path = ROOT / 'book.json'
@@ -457,6 +608,97 @@ else:
                     if not argument.startswith('--'):
                         self.assertFalse(Path(argument).is_absolute(), argument)
 
+    def test_reference_style_images_are_copied_and_resolve_in_html(self) -> None:
+        module = load_module('build_book_reference_images_test', BUILDER)
+        markdown = (
+            '# Chapter\n\n'
+            '![](assets/images/inline.png)\n'
+            '![Full][full]\n'
+            '![collapsed][]\n'
+            '![shortcut]\n'
+            '![][empty]\n\n'
+            '[full]: assets/images/full.png\n'
+            '[collapsed]: assets/images/collapsed.png\n'
+            '[shortcut]: assets/images/shortcut.png\n'
+            '[empty]: assets/images/empty.png\n'
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            write_build_fixture(root, chapter_markdown=markdown)
+            image_names = ('inline.png', 'full.png', 'collapsed.png', 'shortcut.png', 'empty.png')
+            for name in image_names:
+                (root / 'assets' / 'images' / name).write_bytes(name.encode())
+
+            outputs = module.build(root, editions=('main',), formats=('html',))
+
+            self.assertEqual(outputs, (root / 'dist' / 'fixture-main.html',))
+            html = outputs[0].read_text(encoding='utf-8')
+            for name in image_names:
+                copied = root / 'dist' / 'assets' / 'images' / name
+                self.assertEqual(copied.read_bytes(), name.encode())
+                self.assertIn(f'src="assets/images/{name}"', html)
+
+    def test_external_and_escaping_markdown_images_are_rejected(self) -> None:
+        module = load_module('build_book_rejected_images_test', BUILDER)
+        targets = ('https://example.invalid/private.png', '../outside.png')
+        for target in targets:
+            with self.subTest(target=target):
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    root = Path(temporary_directory)
+                    write_build_fixture(root, chapter_markdown=f'# Chapter\n\n![Bad]({target})\n')
+                    with mock.patch.object(module, 'check_tools'):
+                        with self.assertRaisesRegex(
+                            module.BuildError,
+                            r'^image path must stay under assets/images:',
+                        ):
+                            module.build(root, editions=('main',), formats=())
+
+    def test_selected_build_removes_stale_managed_outputs_and_images(self) -> None:
+        module = load_module('build_book_stale_cleanup_test', BUILDER)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            write_build_fixture(
+                root,
+                chapter_markdown='# Chapter\n\n![Current](assets/images/current.png)\n',
+            )
+            (root / 'assets' / 'images' / 'current.png').write_bytes(b'current')
+            stale: dict[str, bytes] = {
+                'build/answers.md': b'stale answers',
+                'build/main-body.typ': b'stale body',
+                'dist/fixture-answers.pdf': b'stale pdf',
+                'dist/fixture-main.pdf': b'stale unselected format',
+                'dist/assets/images/stale.png': b'stale image',
+                'dist/obsolete/nested.bin': b'stale nested file',
+            }
+            for relative, content in stale.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(content)
+
+            outputs = module.build(root, editions=('main',), formats=('html',))
+
+            self.assertEqual(outputs, (root / 'dist' / 'fixture-main.html',))
+            build_files = {
+                path.relative_to(root / 'build').as_posix()
+                for path in (root / 'build').rglob('*')
+                if path.is_file()
+            }
+            dist_files = {
+                path.relative_to(root / 'dist').as_posix()
+                for path in (root / 'dist').rglob('*')
+                if path.is_file()
+            }
+            self.assertEqual(build_files, {'main.md'})
+            self.assertEqual(
+                dist_files,
+                {
+                    'fixture-main.html',
+                    'assets/images/back.webp',
+                    'assets/images/current.png',
+                    'assets/images/front.webp',
+                },
+            )
+
     def test_cli_routes_requested_edition_and_format(self) -> None:
         module = load_module('build_book_cli_route_test', BUILDER)
         self.assertTrue(hasattr(module, 'main'), 'main must exist')
@@ -475,12 +717,24 @@ else:
         )
 
     def test_typst_entrypoint_applies_manifest_metadata_and_visible_credit(self) -> None:
-        build_dir = ROOT / 'build'
-        body = build_dir / 'main-body.typ'
-        pdf = build_dir / 'template-contract.pdf'
-        build_dir.mkdir(exist_ok=True)
-        body.write_text('= TEMPLATE CONTRACT MARKER\n', encoding='utf-8')
-        try:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            (root / 'book').mkdir()
+            (root / 'assets' / 'images').mkdir(parents=True)
+            (root / 'build').mkdir()
+            for relative in (
+                'powershell-zero-to-hero.typ',
+                'book/template.typ',
+                'assets/images/ps-cover.webp',
+                'assets/images/ps-back-cover.webp',
+            ):
+                source = ROOT / relative
+                destination = root / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(source.read_bytes())
+            body = root / 'build' / 'main-body.typ'
+            pdf = root / 'build' / 'template-contract.pdf'
+            body.write_text('= TEMPLATE CONTRACT MARKER\n', encoding='utf-8')
             result = subprocess.run(
                 [
                     'typst',
@@ -504,7 +758,7 @@ else:
                     'powershell-zero-to-hero.typ',
                     'build/template-contract.pdf',
                 ],
-                cwd=ROOT,
+                cwd=root,
                 text=True,
                 capture_output=True,
                 check=False,
@@ -521,9 +775,33 @@ else:
             self.assertIn('Author:          Michel Abboud', info)
             self.assertIn('Created by Visual Forge', text)
             self.assertIn('TEMPLATE CONTRACT MARKER', text)
-        finally:
-            body.unlink(missing_ok=True)
-            pdf.unlink(missing_ok=True)
+
+    def test_check_preserves_seeded_managed_file_bytes(self) -> None:
+        module = load_module('build_book_check_preservation_test', BUILDER)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            write_build_fixture(root)
+            seeded = {
+                'build/unrelated.bin': b'pre-existing build bytes\x00',
+                'dist/unrelated.bin': b'pre-existing dist bytes\x00',
+            }
+            for relative, content in seeded.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(content)
+            before = {
+                relative: hashlib.sha256(content).hexdigest()
+                for relative, content in seeded.items()
+            }
+
+            with mock.patch.object(module, 'check_tools'):
+                module.validate_build(root)
+
+            after = {
+                relative: hashlib.sha256((root / relative).read_bytes()).hexdigest()
+                for relative in seeded
+            }
+            self.assertEqual(after, before)
 
     def test_check_mode_validates_without_generating_outputs(self) -> None:
         before = {
