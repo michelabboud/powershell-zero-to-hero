@@ -10,16 +10,32 @@ A comprehensive illustrated training guide for tech professionals.
 
 ## Building the Book
 
-Requires Python 3 and [Typst](https://typst.app/).
+Requires Python 3, Pandoc 3.1+, [Typst](https://typst.app/), and the
+Libertinus Serif font.
 
 ```bash
-# Rebuild the combined Markdown source
+# Assemble the chapter and appendix Markdown
 python3 assets/build-book.py
 
-# Build a PDF from the preserved Typst source
+# Convert that exact Markdown to a standalone Typst document
+pandoc --from=gfm --to=typst --standalone \
+  --metadata 'title=PowerShell: Zero to Hero' \
+  --metadata 'author=Michel Abboud' \
+  --variable 'mainfont=Libertinus Serif' \
+  --include-before-body=assets/document-metadata.typ \
+  --output=powershell-zero-to-hero.typ \
+  powershell-zero-to-hero.md
+
+# Compile the generated Typst document
 mkdir -p dist
-typst compile assets/body.typ dist/powershell-zero-to-hero.pdf
+typst compile --root . powershell-zero-to-hero.typ \
+  dist/powershell-zero-to-hero.pdf
 ```
+
+Michel Abboud is the book author. Generated editions retain this exact creation
+credit:
+
+`Created by Visual Forge`
 
 ## Running the Answer Tests
 
@@ -39,4 +55,6 @@ pwsh ./tests/run-all.ps1
 - `docs/` -- source inventory and extraction provenance
 
 The root `powershell-zero-to-hero.pdf` is the byte-preserved historical edition.
-New local builds should be written to `dist/`.
+`assets/body.typ` is an extracted layout snapshot, not regenerated output.
+New local builds flow through the assembled Markdown and should be written to
+`dist/`.

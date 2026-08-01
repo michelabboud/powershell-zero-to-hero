@@ -5,6 +5,9 @@ import re
 from pathlib import Path
 
 
+CREATION_CREDIT = 'Created by Visual Forge'
+
+
 def add_page_break() -> str:
     return '\n\n\\newpage\n\n'
 
@@ -29,7 +32,8 @@ def main() -> None:
     if not appendix_paths:
         raise SystemExit('No appendix sources found under appendices/.')
 
-    parts = read_sources(chapter_paths, guide_root)
+    parts = [CREATION_CREDIT, '']
+    parts.extend(read_sources(chapter_paths, guide_root))
     parts.extend((add_page_break(), '# Appendices\n'))
     parts.extend(read_sources(appendix_paths, guide_root))
 

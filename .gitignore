@@ -1,6 +1,7 @@
 # Generated book outputs
 /dist/
 /powershell-zero-to-hero.md
+/powershell-zero-to-hero.typ
 
 # Test output
 /test-results/

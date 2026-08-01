@@ -6,8 +6,15 @@ on 2026-08-01. The source repository was at commit
 tree changes. The snapshot therefore records the captured files themselves,
 not merely the referenced commit.
 
-The machine-local source location is intentionally omitted. The complete
-path-sorted file evidence is recorded in `source-inventory.json`.
+The machine-local source location is intentionally omitted.
+`source-inventory.json` records the original selected-source paths, byte
+counts, and SHA-256 values before public sanitization. It is immutable capture
+evidence and is not a checksum of the current public files.
+
+`destination-inventory.json` separately records the current standalone
+repository content. To avoid self-reference, it excludes exactly
+`docs/source-inventory.json` and `docs/destination-inventory.json`; every
+other tracked file is path-sorted and hashed.
 
 ## Historical PDF
 
@@ -21,6 +28,14 @@ historical credits and styling may differ from the standalone sources.
 
 The chapter and appendix Markdown files are the maintainable source of truth.
 `python3 assets/build-book.py` assembles them into combined Markdown.
-`typst compile assets/body.typ dist/powershell-zero-to-hero.pdf` provides the
-current standalone PDF build path. Generated artifacts belong in `dist/` and
-must not replace the historical root PDF.
+Pandoc converts that combined Markdown into the generated root
+`powershell-zero-to-hero.typ`, and Typst compiles that generated document to
+`dist/powershell-zero-to-hero.pdf`. Michel Abboud is set as the author in both
+the visible Pandoc title block and the PDF document metadata. Generated
+editions carry this exact creation credit:
+
+`Created by Visual Forge`
+
+`assets/body.typ` is the extracted layout snapshot and is not presented as
+regenerated output. Generated artifacts belong in `dist/` and must not
+replace the historical root PDF.

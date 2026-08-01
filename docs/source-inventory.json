@@ -6,8 +6,8 @@
   "files": [
     {
       "path": "README.md",
-      "bytes": 1167,
-      "sha256": "490fb7cd006f0ed56da59e123eddbf0e85ca5e33178337192acb930211a9fcb0"
+      "bytes": 845,
+      "sha256": "18f5538d9c12f229accfc16309bac71b4ceac802f092d2fb79131b9f2f50f3db"
     },
     {
       "path": "answers/00-how-to-use-answers.md",
@@ -116,13 +116,13 @@
     },
     {
       "path": "assets/body.typ",
-      "bytes": 345972,
-      "sha256": "23b3a0af2c1de5d270525b03406ce7937594cf5d821305353246add3e72f905e"
+      "bytes": 345949,
+      "sha256": "85145120473f09f7b309446aeb3bbe5859b2abe2166e37607a99ed7b63f0f943"
     },
     {
       "path": "assets/build-book.py",
-      "bytes": 1536,
-      "sha256": "e0722b272ca9092534bcffd6f965e4137368ba28d301334786551140a9f64ec8"
+      "bytes": 2510,
+      "sha256": "74552b3591c388babba4cad6d1e1e46c0ccbaf92248ce2bc4cf1a67339774de7"
     },
     {
       "path": "assets/images/app-A-cmdlet-quickref.png",
@@ -896,8 +896,8 @@
     },
     {
       "path": "chapters/16-automation-recipes.md",
-      "bytes": 21227,
-      "sha256": "f02905b19c2dd759284b81a4adc835326620044d434032a23cec0f04a3fb3417"
+      "bytes": 21204,
+      "sha256": "ce67c3f4a9a4f6f226b476aaa66189b2f2f71952f685335db71b0c808994a14e"
     },
     {
       "path": "chapters/17-devops-and-cicd.md",
