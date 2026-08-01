@@ -14,7 +14,10 @@ Describe "Chapter 03 - Commands & Cmdlets" {
     }
 
     It "Ex-3 (Advanced): find all Stop-verb cmdlets" {
-        $stopCmds = Get-Command -Verb Stop
+        # Reproduce environments that expose an application or alias whose
+        # name starts with Stop- but which is not a PowerShell cmdlet.
+        Set-Alias -Name Stop-Clock -Value Get-Date -Scope Local
+        $stopCmds = Get-Command -Verb Stop | Where-Object CommandType -EQ Cmdlet
         $stopCmds.Count | Should -BeGreaterThan 0
         $stopCmds | ForEach-Object { $_.Verb | Should -Be 'Stop' }
     }

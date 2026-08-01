@@ -43,6 +43,12 @@ actions. The release job prints the GitHub CLI version and gives `contents:
 write` only to that tag-only job; all pull-request and build jobs remain
 read-only.
 
+The repository-contract job and the all-format build job restore the same
+version-keyed document-tool cache and independently verify Pandoc, Typst, and
+Libertinus before use. This is intentional: the Python contract suite contains
+real build-boundary tests, so running the full suite on a bare Python runner
+would not exercise the declared repository contract.
+
 ## Alternatives considered
 
 - Moving action tags were rejected because a tag can be retargeted; full commit

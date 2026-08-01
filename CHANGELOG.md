@@ -22,6 +22,9 @@ and this project uses semantic version tags for published guide editions.
 - Updated examples and guidance for current PowerShell, Pester, and supported
   cross-platform behavior.
 - Made all maintained build inputs repository-relative and independent.
+- Hardened hosted validation by installing the exact document toolchain before
+  tool-dependent Python contracts and by filtering Stop-verb discovery to
+  cmdlets in the portable answer test.
 
 ### Preserved
 

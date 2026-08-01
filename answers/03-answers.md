@@ -96,20 +96,20 @@ pass through, not *what data* they carry (unless you also specify property names
 ### Solution
 
 ```powershell
-Get-Command -Verb Stop
+Get-Command -Verb Stop | Where-Object CommandType -EQ Cmdlet
 ```
 
 To verify there are no false positives:
 
 ```powershell
-$stopCmds = Get-Command -Verb Stop
+$stopCmds = Get-Command -Verb Stop | Where-Object CommandType -EQ Cmdlet
 $stopCmds | ForEach-Object { $_.Verb | Should -Be 'Stop' }  # Pester assertion
 ```
 
 Or without Pester, a quick sanity check:
 
 ```powershell
-$stopCmds = Get-Command -Verb Stop
+$stopCmds = Get-Command -Verb Stop | Where-Object CommandType -EQ Cmdlet
 $stopCmds | ForEach-Object {
     if ($_.Verb -ne 'Stop') {
         Write-Warning "False positive: $($_.Name)"
@@ -130,17 +130,14 @@ Cmdlet          Stop-Transcript         7.0.0.0    Microsoft.PowerShell.Host
 ...
 ```
 
-The count varies by system. A clean Windows install typically has 5-8 Stop
-cmdlets. A system with additional modules (Az, Exchange, VMware) can have dozens.
+The count varies by platform and by the modules installed on the system.
 
 ### What to notice
 
-`Get-Command -Verb Stop` filters at the source -- it only returns commands whose
-`Verb` property is literally `Stop`. This is more reliable than wildcard matching
-like `Get-Command Stop-*`, which could match a hypothetical command named
-`Stop-AndStartOver-Nonsense` where the verb is actually something else entirely.
-(Okay, that's unlikely, but the principle matters when you're writing scripts
-that need to be correct, not just close enough.)
+`Get-Command -Verb Stop` narrows discovery to Stop-named commands, while the
+`CommandType` filter makes the task's cmdlet boundary explicit. The second
+filter also excludes aliases or applications whose names happen to begin with
+`Stop-` but which do not expose a cmdlet `Verb` property.
 
 ---
 

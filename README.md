@@ -79,8 +79,8 @@ pwsh ./tests/Run-AllTests.ps1
 GitHub Actions runs the same standalone checks on every push and pull request.
 The stable check contexts are:
 
-- `validate / repository` -- Python contracts, repository validation, and
-  actionlint
+- `validate / repository` -- Python contracts under the exact document
+  toolchain, repository validation, and actionlint
 - `validate / pester` -- the complete answer test suite on the pinned
   PowerShell and Pester releases
 - `build-book / all-formats` -- both editions as PDF and HTML after reusable

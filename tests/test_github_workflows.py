@@ -111,6 +111,24 @@ class GitHubWorkflowContractTests(unittest.TestCase):
         self.assertNotIn('python scripts/build_book.py --check', validate_repository_job)
         self.assertIn('python scripts/build_book.py --check', build_job)
 
+    def test_repository_installs_document_tools_before_full_python_suite(self) -> None:
+        text = workflow_text(VALIDATE)
+        repository_job = job_block(text, 'repository')
+        for required in (
+            "PANDOC_VERSION: '3.10.1'",
+            "TYPST_VERSION: '0.15.1'",
+            "LIBERTINUS_VERSION: '7.051'",
+            "PANDOC_SHA256: '72948bf5784f560d5ad1876709daca27e0667f262da727bb33f77b58e52df2f5'",
+            "TYPST_SHA256: 'a6d077d0a95eed5a2eba715b2dae06be954f624ccbf85758a03f389ded33118c'",
+            "LIBERTINUS_SHA256: '4d9be29b5cb380c35af8ba967abcc752ad1e07be1f738a9789c33e0dd7478c92'",
+        ):
+            self.assertIn(required, text)
+        install = '      - name: Install Pandoc, Typst, and Libertinus from official releases\n'
+        run_tests = '      - name: Run repository contracts and validation\n'
+        self.assertIn(install, repository_job)
+        self.assertLess(repository_job.index(install), repository_job.index(run_tests))
+        self.assertIn("python -m unittest discover -s tests -p 'test_*.py'", repository_job)
+
     def test_external_actions_use_full_shas_with_version_comments(self) -> None:
         action_uses = external_action_uses(
             workflow_text(VALIDATE) + '\n' + workflow_text(BUILD),

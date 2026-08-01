@@ -317,7 +317,7 @@ then explore what parameters they accept.
 
 ```powershell
 # Step 1: Find them
-Get-Command -Verb Stop
+Get-Command -Verb Stop | Where-Object CommandType -EQ Cmdlet
 
 # Step 2: Pick one and explore its parameters
 Get-Help Stop-Process -Detailed

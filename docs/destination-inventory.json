@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "destinationDescriptor": "public-standalone-working-tree",
-  "capturedAt": "2026-08-01T12:34:04Z",
+  "capturedAt": "2026-08-01T12:49:06Z",
   "excludedPaths": [
     "docs/destination-inventory.json",
     "docs/source-inventory.json"
@@ -19,8 +19,8 @@
     },
     {
       "path": ".github/workflows/validate.yml",
-      "bytes": 5749,
-      "sha256": "31432e0f45805597e22ff29c599fe5d7a918e8f7f4137ca856d110f11499ae5e"
+      "bytes": 9154,
+      "sha256": "eca93250bd0bea048561eab29e446d12c4fa4b42058e40018bb5eabbbccdbffa"
     },
     {
       "path": ".gitignore",
@@ -34,8 +34,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "bytes": 1085,
-      "sha256": "adfd325b9d84d9f00b35c9ae54adfb370fcd0118a82aa919fa7678f5385b53c7"
+      "bytes": 1277,
+      "sha256": "596486e4b4a406d1cd6e48510925a0f3da6ad507cb6bb2f05501b20139161402"
     },
     {
       "path": "CONTRIBUTING.md",
@@ -54,8 +54,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 5642,
-      "sha256": "3608f05391d2e23747cddf30dc826f1f9b6441a244df8856b54c490a5bc50278"
+      "bytes": 5677,
+      "sha256": "0a76d8bdcf3be59cb3e5b9d88a6870853da791c93332231712c7432845c8c892"
     },
     {
       "path": "VERSION",
@@ -79,8 +79,8 @@
     },
     {
       "path": "answers/03-answers.md",
-      "bytes": 6550,
-      "sha256": "d9045b957c57b4804d0b8827b09d0e5c3c62ec5c88ba0c841fafd24e54f4dd5b"
+      "bytes": 6423,
+      "sha256": "5b52f5119d62270052f4fafaa72c8b07ed78f25c858bc9b43c8c2c680ade0aad"
     },
     {
       "path": "answers/04-answers.md",
@@ -884,8 +884,8 @@
     },
     {
       "path": "chapters/03-commands-and-cmdlets.md",
-      "bytes": 11943,
-      "sha256": "f1e776c57a7d690cc943a5a42460f9efcc31462548daf0205545f09410dac693"
+      "bytes": 11981,
+      "sha256": "960f689b060307d80e98d29b7743a19f179ef40e3302814f4058ba1f9a7386f5"
     },
     {
       "path": "chapters/04-variables-and-types.md",
@@ -959,13 +959,13 @@
     },
     {
       "path": "docs/content-audit.md",
-      "bytes": 17297,
-      "sha256": "91af41ba74986531d39124c87b428e28a3479613246cc5dc2b2574fb4bf3f709"
+      "bytes": 17356,
+      "sha256": "7e8bb75a0c4b31872eeeb17b3c24b290238c2e63786c6509c59048175b53b134"
     },
     {
       "path": "docs/dependency-review.md",
-      "bytes": 8899,
-      "sha256": "1759f2f56a5f8b5600c11a3b9f54dbdec75a0af6ef75cdd93308a51336d82da7"
+      "bytes": 9261,
+      "sha256": "41dc31b848c885cf5b54c38b06ef3bb5aaef0d18e499735d31914ecabea27562"
     },
     {
       "path": "docs/provenance.md",
@@ -1019,8 +1019,8 @@
     },
     {
       "path": "tests/ch-03.tests.ps1",
-      "bytes": 1476,
-      "sha256": "5223111c980152f2cd88ff772a07cfbe4ba438371a5600da8b0b0968c7e130b0"
+      "bytes": 1724,
+      "sha256": "dd68394bd6bcf0dc726bbff429ca5178418515d098f597316382381d4b1778c6"
     },
     {
       "path": "tests/ch-04.tests.ps1",
@@ -1104,8 +1104,8 @@
     },
     {
       "path": "tests/test_github_workflows.py",
-      "bytes": 11336,
-      "sha256": "0f3d83df4473522e0243bcb1de3060526a44cb6f1f17631ba6a70ec801e0d692"
+      "bytes": 12417,
+      "sha256": "0b37227f7b1188fc09e93876b6a971631ec61ce28de042c973e1db217d1de0be"
     },
     {
       "path": "tests/test_validate_repository.py",
