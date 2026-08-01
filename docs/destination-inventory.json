@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "destinationDescriptor": "public-standalone-working-tree",
-  "capturedAt": "2026-08-01T11:10:52Z",
+  "capturedAt": "2026-08-01T11:40:21.618049Z",
   "excludedPaths": [
     "docs/destination-inventory.json",
     "docs/source-inventory.json"
@@ -109,8 +109,8 @@
     },
     {
       "path": "answers/15-answers.md",
-      "bytes": 6964,
-      "sha256": "8beb3f22abb04d5e8dfa8d7aac09bee3eb4a00b064fb4111c50e57adee2575c7"
+      "bytes": 9089,
+      "sha256": "533a3010be34539600e1b267dd389eb620d5113f60cca156d906ee575ddb551c"
     },
     {
       "path": "answers/16-answers.md",
@@ -119,8 +119,8 @@
     },
     {
       "path": "answers/17-answers.md",
-      "bytes": 12248,
-      "sha256": "782ca3df4c9c14c8384c2be8c2d5c14ace06b8e87552fa9d3a25197d69351c2d"
+      "bytes": 12295,
+      "sha256": "ed4d7e17fee702c649b3acf04dd27e1ca4c48d8212c20965d57b3dc55930961d"
     },
     {
       "path": "appendices/A-cheat-sheet.md",
@@ -844,8 +844,8 @@
     },
     {
       "path": "chapters/01-what-is-powershell.md",
-      "bytes": 12412,
-      "sha256": "079aa8cfc4b078415501060f654103f359286b1c4c386a9245f59011805b1239"
+      "bytes": 13308,
+      "sha256": "93a5c326f709672038153b4fe90a435de7fc2ce5728899c24502a1c487ad19ee"
     },
     {
       "path": "chapters/02-the-console.md",
@@ -914,8 +914,8 @@
     },
     {
       "path": "chapters/15-active-directory.md",
-      "bytes": 15118,
-      "sha256": "5da4196c65819a630fe8501382aea2df0bca14f641647bad49591fb9716fa755"
+      "bytes": 18614,
+      "sha256": "2cf153ad013329c08bdccb4b12493b328da10d1a38881cfdd27392b5e90118d7"
     },
     {
       "path": "chapters/16-automation-recipes.md",
@@ -924,13 +924,13 @@
     },
     {
       "path": "chapters/17-devops-and-cicd.md",
-      "bytes": 25589,
-      "sha256": "9bba72724eea44ef476f48207039c76a593b0f6cd1e8e1609e1cafc91139d762"
+      "bytes": 25613,
+      "sha256": "6788dda7500fd7a7db6b677207905468dd773eb97ea6bd5a6ae08e0c75548a80"
     },
     {
       "path": "docs/content-audit.md",
-      "bytes": 14658,
-      "sha256": "5a33394edfa619840f52df70c94f7ef0eae7d58a3c7e7e3c9e350a46c5e8c513"
+      "bytes": 17297,
+      "sha256": "91af41ba74986531d39124c87b428e28a3479613246cc5dc2b2574fb4bf3f709"
     },
     {
       "path": "docs/provenance.md",
@@ -1044,8 +1044,8 @@
     },
     {
       "path": "tests/ch-15.tests.ps1",
-      "bytes": 4141,
-      "sha256": "8d2caa47c14830ac167e4a92ef73378e5d4f9f9d18e7084a1c23c2d804a5abdf"
+      "bytes": 8999,
+      "sha256": "5a604164510fb163ffc7525fa7c858b7272b6fb24ff68a5d0e5693e005e36c68"
     },
     {
       "path": "tests/ch-16.tests.ps1",
@@ -1054,13 +1054,13 @@
     },
     {
       "path": "tests/ch-17.tests.ps1",
-      "bytes": 3660,
-      "sha256": "76d7be33963c267f952df3241167402b92a9cb7d989847760430cad17e452092"
+      "bytes": 3668,
+      "sha256": "ad603463172ef309f6e260aa45a45c5db60c7423fa981c73f0d784853ac49f5b"
     },
     {
       "path": "tests/test-publication-contract.py",
-      "bytes": 8963,
-      "sha256": "65554f9732a69f2a9fd10ff0a0b85678854bbad6294eb21266f40c4329591083"
+      "bytes": 11427,
+      "sha256": "0a8d76984ce85bbc0728029a47652f729f4df6533e0316edc9707ff367de5399"
     },
     {
       "path": "tests/test_build_book.py",

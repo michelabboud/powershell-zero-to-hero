@@ -413,7 +413,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -446,7 +446,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: pester-results
           path: test-results.xml
@@ -467,7 +467,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -482,7 +482,7 @@ Module installation on every run adds 30-90 seconds. Cache them:
 
 ```yaml
       - name: Cache PowerShell modules
-        uses: actions/cache@v6
+        uses: actions/cache@v6.1.0
         with:
           path: ~/.local/share/powershell/Modules
           key: ${{ runner.os }}-psmodules-${{ hashFiles('requirements.psd1') }}
@@ -572,7 +572,7 @@ The `PublishTestResults@2` task ingests the NUnit XML and shows pass/fail counts
 |---|---|---|
 | PowerShell shell | `shell: pwsh` on any step | `pwsh: true` on `PowerShell@2` task |
 | Variables | `${{ env.VAR }}` | `$(VAR)` |
-| Artifacts | `upload-artifact@v4` | `PublishBuildArtifacts@1` |
+| Artifacts | `upload-artifact@v7.0.1` | `PublishBuildArtifacts@1` |
 | Test results | Third-party action | `PublishTestResults@2` built-in |
 | Billing and hosted capacity | Consult the current GitHub Actions billing documentation | Consult the current Azure Pipelines pricing documentation |
 
@@ -693,7 +693,7 @@ Build a hashtable that represents a valid GitHub Actions CI workflow for PowerSh
 - Name: `PowerShell CI`
 - Triggers: `push` and `pull_request` on `main`
 - One job named `test` running on `ubuntu-latest`
-- Two steps: `actions/checkout@v7`, then a `pwsh` step that runs `Invoke-Pester -CI`
+- Two steps: `actions/checkout@v7.0.1`, then a `pwsh` step that runs `Invoke-Pester -CI`
 
 Validate the structure with assertions: workflow name, runner OS, and step count.
 

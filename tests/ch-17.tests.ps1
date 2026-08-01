@@ -49,7 +49,7 @@ Describe "Chapter 17 - DevOps & CI/CD" {
                 test = @{
                     'runs-on' = 'ubuntu-latest'
                     steps = @(
-                        @{ uses = 'actions/checkout@v7' },
+                        @{ uses = 'actions/checkout@v7.0.1' },
                         @{ name = 'Run Pester'; shell = 'pwsh'; run = 'Invoke-Pester -CI' }
                     )
                 }
@@ -58,7 +58,7 @@ Describe "Chapter 17 - DevOps & CI/CD" {
         $workflow.name | Should -Be 'PowerShell CI'
         $workflow.jobs.test.'runs-on' | Should -Be 'ubuntu-latest'
         $workflow.jobs.test.steps.Count | Should -Be 2
-        $workflow.jobs.test.steps[0].uses | Should -Be 'actions/checkout@v7'
+        $workflow.jobs.test.steps[0].uses | Should -Be 'actions/checkout@v7.0.1'
     }
 
     It "Ex-4 (Extreme): full CI/CD pipeline dry-run" {

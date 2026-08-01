@@ -134,18 +134,41 @@ Homebrew is a community-supported alternative (not a Microsoft-supported package
 brew install powershell
 ```
 
-### Linux -- Ubuntu/Debian (apt)
+### Linux -- Ubuntu (apt)
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y wget apt-transport-https software-properties-common
 source /etc/os-release
+[ "$ID" = "ubuntu" ] || { echo "This procedure is for Ubuntu, not $ID." >&2; exit 1; }
 wget -q "https://packages.microsoft.com/config/ubuntu/$VERSION_ID/packages-microsoft-prod.deb"
 sudo dpkg -i packages-microsoft-prod.deb
 rm packages-microsoft-prod.deb
 sudo apt-get update
 sudo apt-get install -y powershell
 ```
+
+### Linux -- Debian (apt)
+
+Ubuntu and Debian use different Microsoft package feeds. Do not substitute one
+distribution name for the other. The guard below stops a copied command block
+before it configures the wrong repository.
+
+```bash
+sudo apt-get update
+sudo apt-get install -y wget
+source /etc/os-release
+[ "$ID" = "debian" ] || { echo "This procedure is for Debian, not $ID." >&2; exit 1; }
+wget -q "https://packages.microsoft.com/config/debian/$VERSION_ID/packages-microsoft-prod.deb"
+sudo dpkg -i packages-microsoft-prod.deb
+rm packages-microsoft-prod.deb
+sudo apt-get update
+sudo apt-get install -y powershell
+```
+
+Microsoft publishes packages only for the distribution releases listed as
+supported on its Ubuntu and Debian installation pages. Check that list before
+using these commands in a fleet rollout.
 
 ### Linux -- Snap (Canonical-maintained alternative)
 

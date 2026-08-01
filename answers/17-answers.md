@@ -186,7 +186,7 @@ $workflow = @{
         test = @{
             'runs-on' = 'ubuntu-latest'
             steps     = @(
-                @{ uses = 'actions/checkout@v7' },
+                @{ uses = 'actions/checkout@v7.0.1' },
                 @{
                     name  = 'Run Pester'
                     shell = 'pwsh'
@@ -201,7 +201,7 @@ $workflow = @{
 $workflow.name                         # PowerShell CI
 $workflow.jobs.test.'runs-on'          # ubuntu-latest
 $workflow.jobs.test.steps.Count        # 2
-$workflow.jobs.test.steps[0].uses      # actions/checkout@v7
+$workflow.jobs.test.steps[0].uses      # actions/checkout@v7.0.1
 $workflow.jobs.test.steps[1].shell     # pwsh
 
 # Treat this as an object-model exercise. Maintain production workflow YAML
@@ -218,7 +218,7 @@ validate the resulting workflow with GitHub's tooling before relying on it.
 PowerShell CI
 ubuntu-latest
 2
-actions/checkout@v7
+actions/checkout@v7.0.1
 pwsh
 ```
 
@@ -236,10 +236,10 @@ infrastructure use YAML 1.2 where this is not an issue, but if you serialize thi
 hashtable and see `'on': true` in the output, your YAML library is quoting the key as
 a safety measure. That's fine -- GitHub Actions handles it correctly.
 
-**`actions/checkout@v7`.** A major-version tag is easier to maintain than
-`@main` or `@latest`, but it can still move. For the strongest supply-chain
-control, pin a reviewed full commit SHA and use dependency automation to
-propose updates.
+**`actions/checkout@v7.0.1`.** An exact release tag is more reviewable than
+`@main`, `@latest`, or a moving major tag, but a tag can still be retargeted.
+For the strongest supply-chain control, pin a reviewed full commit SHA and use
+dependency automation to propose updates.
 
 **Cross-platform `pwsh`.** Specifying `shell: pwsh` on a GitHub Actions step uses the
 PowerShell 7 binary (`pwsh`) regardless of the runner OS. On `ubuntu-latest` and

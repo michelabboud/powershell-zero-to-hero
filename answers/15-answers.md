@@ -144,44 +144,98 @@ loop executed both calls without any real AD dependency.
 ## Ch-15, Ex-4 (Extreme)
 
 **Task:** Write `New-UserOnboarding` — a function that creates an AD user,
-sets their attributes, and adds them to two groups, returning a structured
-summary object.
+sets their attributes, and adds them to two groups. It must preview safely,
+stop on AD errors, and return a structured staged result on every path.
 
 ### Solution
 
 ```powershell
 function New-UserOnboarding {
-    [CmdletBinding(SupportsShouldProcess)]
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
     param(
-        [Parameter(Mandatory)] [string] $FirstName,
-        [Parameter(Mandatory)] [string] $LastName,
-        [Parameter(Mandatory)] [string] $Department,
-        [Parameter(Mandatory)] [string] $Title,
-        [Parameter(Mandatory)] [SecureString] $TemporaryPassword
+        [Parameter(Mandatory)] [ValidateNotNullOrEmpty()] [string] $FirstName,
+        [Parameter(Mandatory)] [ValidateNotNullOrEmpty()] [string] $LastName,
+        [Parameter(Mandatory)] [ValidateNotNullOrEmpty()] [string] $Department,
+        [Parameter(Mandatory)] [ValidateNotNullOrEmpty()] [string] $Title,
+        [Parameter(Mandatory)] [SecureString] $TemporaryPassword,
+        [switch] $RemovePartialUserOnFailure
     )
 
     $sam = "$($FirstName.Substring(0,1).ToLower())$($LastName.ToLower())"
     $upn = "$sam@corp.local"
 
-    if ($PSCmdlet.ShouldProcess($sam, 'Create and configure AD user')) {
+    $state = [ordered]@{
+        SAM              = $sam
+        UPN              = $upn
+        Status           = 'Planned'
+        Stage            = 'Plan'
+        CompletedStages  = [System.Collections.Generic.List[string]]::new()
+        GroupsAdded      = [System.Collections.Generic.List[string]]::new()
+        CleanupAttempted = $false
+        CleanupSucceeded = $null
+        Error            = $null
+        CleanupError     = $null
+    }
+
+    if (-not $PSCmdlet.ShouldProcess($sam, 'Create and configure AD user')) {
+        $state.Status = 'WhatIf'
+        return [PSCustomObject] $state
+    }
+
+    $userCreated = $false
+    try {
+        $state.Stage = 'CreateUser'
         New-ADUser `
             -Name              "$FirstName $LastName" `
             -SamAccountName    $sam `
             -UserPrincipalName $upn `
             -AccountPassword   $TemporaryPassword `
-            -Enabled           $true
+            -Enabled           $true `
+            -ErrorAction       Stop
+        $userCreated = $true
+        $state.CompletedStages.Add('CreateUser')
 
-        Set-ADUser -Identity $sam -Department $Department -Title $Title
+        $state.Stage = 'SetAttributes'
+        Set-ADUser -Identity $sam -Department $Department -Title $Title `
+            -ErrorAction Stop
+        $state.CompletedStages.Add('SetAttributes')
 
-        Add-ADGroupMember -Identity 'AllEmployees' -Members $sam
-        Add-ADGroupMember -Identity $Department    -Members $sam
+        foreach ($group in @('AllEmployees', $Department)) {
+            $state.Stage = "AddGroup:$group"
+            Add-ADGroupMember -Identity $group -Members $sam -ErrorAction Stop
+            $state.GroupsAdded.Add($group)
+            $state.CompletedStages.Add("AddGroup:$group")
+        }
 
-        [PSCustomObject]@{
-            SAM    = $sam
-            UPN    = $upn
-            Groups = @('AllEmployees', $Department)
+        $state.Stage = 'Complete'
+        $state.Status = 'Complete'
+    }
+    catch {
+        $state.Error = $_.Exception.Message
+        if ($userCreated) {
+            $state.Status = 'PartialFailure'
+        }
+        else {
+            $state.Status = 'Failed'
+        }
+
+        if ($userCreated -and $RemovePartialUserOnFailure -and
+            $PSCmdlet.ShouldProcess($sam, 'Remove partially provisioned AD user')) {
+            $state.CleanupAttempted = $true
+            $state.CleanupSucceeded = $false
+            try {
+                Remove-ADUser -Identity $sam -Confirm:$false -ErrorAction Stop
+                $state.CleanupSucceeded = $true
+                $state.Status = 'FailedCleanupCompleted'
+                $state.CompletedStages.Add('CleanupUser')
+            }
+            catch {
+                $state.CleanupError = $_.Exception.Message
+            }
         }
     }
+
+    [PSCustomObject] $state
 }
 ```
 
@@ -193,24 +247,26 @@ $result = New-UserOnboarding -FirstName 'Charlie' -LastName 'Davis' `
     -Department 'Engineering' -Title 'Developer' `
     -TemporaryPassword $temporaryPassword
 
-$result.SAM    # cdavis
-$result.UPN    # cdavis@corp.local
-$result.Groups # AllEmployees, Engineering
+$result.SAM         # cdavis
+$result.UPN         # cdavis@corp.local
+$result.Status      # Complete
+$result.GroupsAdded # AllEmployees, Engineering
 ```
 
 ### What to notice
 
-The function follows the **single-responsibility by layer** pattern: one
-block creates, one modifies attributes, two lines handle group membership.
-Each concern is a distinct AD call rather than one massive `New-ADUser`
-parameter list — this makes it easier to wrap individual calls in
-`try/catch` later. `Groups` is stored as an array literal `@('AllEmployees',
-$Department)`, which means `$result.Groups | Should -Contain 'Engineering'`
-works cleanly in Pester via the `-Contain` operator. `Should -Invoke
-Add-ADGroupMember -Times 2` in the test verifies both group calls fired
-without needing a real domain — a good example of behaviour verification
-(did we attempt the right operations?) rather than state verification (is
-the user actually in the group?). The caller supplies a `SecureString`; the
-function never contains or derives a plaintext credential. Because every AD
-write is inside `ShouldProcess`, callers can preview the complete mutation
-unit with `-WhatIf`.
+`ShouldProcess` gates the workflow before the first write, so `-WhatIf` returns
+a `WhatIf` result and invokes no AD cmdlet. `-ErrorAction Stop` makes each AD
+failure terminating; `catch` then returns the failed stage, completed stages,
+groups that were actually added, and the error. `Complete` is assigned only
+after all four mutations succeed, so a group failure cannot produce a false
+success result.
+
+The sequence is **not a transaction**. A newly created but partially configured
+user remains in AD by default for investigation. The caller may explicitly add
+`-RemovePartialUserOnFailure` to request a separately confirmed compensating
+delete. That cleanup is limited to a user created by this invocation, and even
+when it succeeds the result says `FailedCleanupCompleted`, not "rolled back,"
+because directory replication, audit records, and other observed side effects
+can remain. The Pester suite verifies success, `-WhatIf` with zero mutations,
+and a second-group failure that reports only the first group as completed.

@@ -324,26 +324,48 @@ Move-ADObject -Identity 'CN=Jane Smith,OU=NewHires,DC=corp,DC=local' `
 ## Automated Onboarding: Putting It Together
 
 Real onboarding scripts combine everything: create user, set attributes,
-assign groups, maybe trigger an email. Here's a production-grade function:
+assign groups, maybe trigger an email. The following resilient pattern reports
+exactly how far it got and makes compensating cleanup an explicit choice:
 
 ```powershell
 function New-UserOnboarding {
-    [CmdletBinding(SupportsShouldProcess)]
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
     param(
-        [Parameter(Mandatory)] [string] $FirstName,
-        [Parameter(Mandatory)] [string] $LastName,
-        [Parameter(Mandatory)] [string] $Department,
-        [Parameter(Mandatory)] [string] $Title,
+        [Parameter(Mandatory)] [ValidateNotNullOrEmpty()] [string] $FirstName,
+        [Parameter(Mandatory)] [ValidateNotNullOrEmpty()] [string] $LastName,
+        [Parameter(Mandatory)] [ValidateNotNullOrEmpty()] [string] $Department,
+        [Parameter(Mandatory)] [ValidateNotNullOrEmpty()] [string] $Title,
         [Parameter(Mandatory)] [SecureString] $TemporaryPassword,
         [string] $Manager,
-        [string] $BasePath = 'OU=Users,DC=corp,DC=local'
+        [string] $BasePath = 'OU=Users,DC=corp,DC=local',
+        [switch] $RemovePartialUserOnFailure
     )
 
     $sam  = "$($FirstName.Substring(0,1).ToLower())$($LastName.ToLower())"
     $upn  = "$sam@corp.local"
     $ouPath = "OU=$Department,$BasePath"
 
-    if ($PSCmdlet.ShouldProcess($sam, 'Create AD user and assign groups')) {
+    $state = [ordered]@{
+        SAM             = $sam
+        UPN             = $upn
+        Status          = 'Planned'
+        Stage           = 'Plan'
+        CompletedStages = [System.Collections.Generic.List[string]]::new()
+        GroupsAdded     = [System.Collections.Generic.List[string]]::new()
+        CleanupAttempted = $false
+        CleanupSucceeded = $null
+        Error            = $null
+        CleanupError     = $null
+    }
+
+    if (-not $PSCmdlet.ShouldProcess($sam, 'Create and configure AD user')) {
+        $state.Status = 'WhatIf'
+        return [PSCustomObject] $state
+    }
+
+    $userCreated = $false
+    try {
+        $state.Stage = 'CreateUser'
         New-ADUser `
             -Name              "$FirstName $LastName" `
             -GivenName         $FirstName `
@@ -354,26 +376,62 @@ function New-UserOnboarding {
             -AccountPassword   $TemporaryPassword `
             -Department        $Department `
             -Title             $Title `
-            -Enabled           $true
+            -Enabled           $true `
+            -ErrorAction       Stop
+        $userCreated = $true
+        $state.CompletedStages.Add('CreateUser')
 
-        # Standard groups every employee needs
-        Add-ADGroupMember -Identity 'AllEmployees'  -Members $sam
-        Add-ADGroupMember -Identity $Department     -Members $sam
+        foreach ($group in @('AllEmployees', $Department)) {
+            $state.Stage = "AddGroup:$group"
+            Add-ADGroupMember -Identity $group -Members $sam -ErrorAction Stop
+            $state.GroupsAdded.Add($group)
+            $state.CompletedStages.Add("AddGroup:$group")
+        }
 
         if ($Manager) {
-            $managerDN = (Get-ADUser -Identity $Manager).DistinguishedName
-            Set-ADUser -Identity $sam -Manager $managerDN
+            $state.Stage = 'ResolveManager'
+            $managerDN = (Get-ADUser -Identity $Manager `
+                -Properties DistinguishedName -ErrorAction Stop).DistinguishedName
+            if (-not $managerDN) {
+                throw "Manager '$Manager' has no DistinguishedName."
+            }
+            $state.CompletedStages.Add('ResolveManager')
+
+            $state.Stage = 'AssignManager'
+            Set-ADUser -Identity $sam -Manager $managerDN -ErrorAction Stop
+            $state.CompletedStages.Add('AssignManager')
         }
 
+        $state.Stage = 'Complete'
+        $state.Status = 'Complete'
         Write-Verbose "Onboarding complete for $sam ($upn)"
+    }
+    catch {
+        $state.Error = $_.Exception.Message
+        if ($userCreated) {
+            $state.Status = 'PartialFailure'
+        }
+        else {
+            $state.Status = 'Failed'
+        }
 
-        [PSCustomObject]@{
-            SAM        = $sam
-            UPN        = $upn
-            Department = $Department
-            Groups     = @('AllEmployees', $Department)
+        if ($userCreated -and $RemovePartialUserOnFailure -and
+            $PSCmdlet.ShouldProcess($sam, 'Remove partially provisioned AD user')) {
+            $state.CleanupAttempted = $true
+            $state.CleanupSucceeded = $false
+            try {
+                Remove-ADUser -Identity $sam -Confirm:$false -ErrorAction Stop
+                $state.CleanupSucceeded = $true
+                $state.Status = 'FailedCleanupCompleted'
+                $state.CompletedStages.Add('CleanupUser')
+            }
+            catch {
+                $state.CleanupError = $_.Exception.Message
+            }
         }
     }
+
+    [PSCustomObject] $state
 }
 
 # Usage
@@ -384,12 +442,28 @@ New-UserOnboarding -FirstName 'Charlie' -LastName 'Davis' `
 ```
 
 `SupportsShouldProcess` adds `-WhatIf` and `-Confirm`, but only because the
-function wraps its mutation block in `$PSCmdlet.ShouldProcess()`. Run it with
-`-WhatIf` first in any environment you value.
+function gates the mutation before the first AD write. `-WhatIf` returns a
+structured `WhatIf` result and calls no AD cmdlets. Every AD call uses
+`-ErrorAction Stop`, so a failure enters `catch`; the returned `Stage`,
+`CompletedStages`, and `GroupsAdded` fields distinguish a failed create from a
+partially configured account. `Complete` is assigned only after every requested
+operation succeeds.
+
+This sequence is **not a transaction**. By default, a partially created user is
+retained for investigation, and the result reports `PartialFailure`. The
+`-RemovePartialUserOnFailure` switch opts into a separate, confirmed
+compensating action only for a user created by this invocation. Even successful
+cleanup does not erase directory replication, audit logs, or other observed
+side effects, so the function reports `FailedCleanupCompleted`, never
+"rolled back." Run with `-WhatIf` first and inspect the result in every
+environment you value.
 
 ---
 
 ## Quick Reference
+
+Use these commands as a starting point, then narrow their scope and add
+environment-appropriate error handling before automating changes.
 
 ```powershell
 # Find all users in an OU
@@ -464,10 +538,15 @@ Write a `New-UserOnboarding` function that:
 3. Calls `New-ADUser` to create the account enabled with that temporary password
 4. Calls `Set-ADUser` to set `Department` and `Title`
 5. Calls `Add-ADGroupMember` twice: once for `'AllEmployees'` and once for the department group
-6. Returns a `[PSCustomObject]` with `SAM`, `UPN`, and `Groups` properties
+6. Uses terminating errors and returns a staged `[PSCustomObject]` that reports
+   `Status`, `Stage`, completed stages, groups added, and any failure
+7. Supports `-WhatIf` without invoking any AD cmdlet
+8. Retains a partially created user by default and offers explicitly requested,
+   separately confirmed compensating cleanup
 
 **Constraints:**
 - All AD cmdlets mocked in Pester
 - No plaintext password literals in the function or test fixture
-- `Groups` property must be an array containing both group names
+- Do not describe the multi-call workflow as transactional or rolled back
 - `Should -Invoke` assertions on all three AD cmdlets
+- Test the success, `-WhatIf`, and partial-failure paths

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -228,6 +229,65 @@ class BuildPipelineTests(unittest.TestCase):
             self.assertEqual(pdf_text.count('Created by Visual Forge'), 1)
             self.assertEqual(historical_before, historical_entry['sha256'])
             self.assertEqual(sha256(historical_pdf), historical_before)
+
+
+class GuideContentContractTests(unittest.TestCase):
+    def test_linux_install_sections_use_the_matching_distribution_feed(self) -> None:
+        chapter = (ROOT / 'chapters' / '01-what-is-powershell.md').read_text(
+            encoding='utf-8',
+        )
+
+        self.assertNotIn('### Linux -- Ubuntu/Debian (apt)', chapter)
+        ubuntu = chapter.split('### Linux -- Ubuntu (apt)', 1)[1].split(
+            '### Linux -- Debian (apt)',
+            1,
+        )[0]
+        debian = chapter.split('### Linux -- Debian (apt)', 1)[1].split(
+            '### Linux -- Snap',
+            1,
+        )[0]
+
+        self.assertIn('packages.microsoft.com/config/ubuntu/$VERSION_ID', ubuntu)
+        self.assertNotIn('packages.microsoft.com/config/debian/', ubuntu)
+        self.assertIn('packages.microsoft.com/config/debian/$VERSION_ID', debian)
+        self.assertNotIn('packages.microsoft.com/config/ubuntu/', debian)
+
+    def test_github_action_examples_use_reviewed_current_versions(self) -> None:
+        paths = (
+            ROOT / 'chapters' / '17-devops-and-cicd.md',
+            ROOT / 'answers' / '17-answers.md',
+            ROOT / 'tests' / 'ch-17.tests.ps1',
+        )
+        text = '\n'.join(path.read_text(encoding='utf-8') for path in paths)
+        expected = {
+            'checkout': 'v7.0.1',
+            'cache': 'v6.1.0',
+            'upload-artifact': 'v7.0.1',
+        }
+
+        references = re.findall(
+            r'actions/(checkout|cache|upload-artifact)@([A-Za-z0-9._-]+)',
+            text,
+        )
+        self.assertTrue(references)
+        for action, version in references:
+            self.assertEqual(version, expected[action], f'actions/{action}@{version}')
+        for action, version in expected.items():
+            self.assertIn(f'actions/{action}@{version}', text)
+
+    def test_ad_onboarding_examples_report_partial_failure_without_false_success(self) -> None:
+        paths = (
+            ROOT / 'chapters' / '15-active-directory.md',
+            ROOT / 'answers' / '15-answers.md',
+        )
+        text = '\n'.join(path.read_text(encoding='utf-8') for path in paths)
+
+        self.assertNotIn("Here's a production-grade function", text)
+        self.assertIn('SupportsShouldProcess', text)
+        self.assertIn('-ErrorAction Stop', text)
+        self.assertIn("Status = 'PartialFailure'", text)
+        self.assertIn('RemovePartialUserOnFailure', text)
+        self.assertIn('not a transaction', text)
 
 
 if __name__ == '__main__':
