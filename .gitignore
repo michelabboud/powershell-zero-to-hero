@@ -1,0 +1,15 @@
+# Generated book outputs
+/dist/
+/powershell-zero-to-hero.md
+
+# Test output
+/test-results/
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+*.tmp
