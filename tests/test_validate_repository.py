@@ -345,6 +345,82 @@ class ValidatorTests(unittest.TestCase):
         self.assert_issue(result, 'image-missing', 'README.md')
         self.assertNotIn(marker, result.stdout)
 
+    def test_accepts_empty_alt_reference_image(self) -> None:
+        readme = self.fixture.root / 'README.md'
+        readme.write_text(
+            readme.read_text(encoding='utf-8')
+            + '\n![][diagram]\n\n[diagram]: assets/images/example.png\n',
+            encoding='utf-8',
+        )
+        self.fixture.refresh_destination_inventory()
+
+        result = self.run_validator()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_reports_empty_alt_reference_image_without_definition(self) -> None:
+        readme = self.fixture.root / 'README.md'
+        readme.write_text(
+            readme.read_text(encoding='utf-8') + '\n![][undefined-diagram]\n',
+            encoding='utf-8',
+        )
+
+        result = self.run_validator()
+
+        self.assert_issue(result, 'reference-definition-missing', 'README.md')
+
+    def test_reports_empty_alt_reference_image_with_missing_target(self) -> None:
+        marker = 'missing-empty-alt-reference-image'
+        readme = self.fixture.root / 'README.md'
+        readme.write_text(
+            readme.read_text(encoding='utf-8')
+            + f'\n![][diagram]\n\n[diagram]: assets/images/{marker}.png\n',
+            encoding='utf-8',
+        )
+
+        result = self.run_validator()
+
+        self.assert_issue(result, 'image-missing', 'README.md')
+        self.assertNotIn(marker, result.stdout)
+
+    def test_reports_empty_alt_reference_image_outside_image_root(self) -> None:
+        readme = self.fixture.root / 'README.md'
+        readme.write_text(
+            readme.read_text(encoding='utf-8')
+            + '\n![][diagram]\n\n[diagram]: README.md\n',
+            encoding='utf-8',
+        )
+
+        result = self.run_validator()
+
+        self.assert_issue(result, 'image-path', 'README.md')
+
+    def test_accepts_ordinary_empty_text_reference_link(self) -> None:
+        readme = self.fixture.root / 'README.md'
+        readme.write_text(
+            readme.read_text(encoding='utf-8')
+            + '\n[][document]\n\n[document]: README.md\n',
+            encoding='utf-8',
+        )
+        self.fixture.refresh_destination_inventory()
+
+        result = self.run_validator()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_ignores_unsupported_empty_collapsed_and_shortcut_references(self) -> None:
+        readme = self.fixture.root / 'README.md'
+        readme.write_text(
+            readme.read_text(encoding='utf-8')
+            + '\n![][]\n\n![]\n\n[][]\n\n[]\n',
+            encoding='utf-8',
+        )
+        self.fixture.refresh_destination_inventory()
+
+        result = self.run_validator()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_reports_missing_reference_definition(self) -> None:
         readme = self.fixture.root / 'README.md'
         readme.write_text(

@@ -95,7 +95,7 @@ REFERENCE_DEFINITION_RE = re.compile(
     r'(?:[ \t]+(?:"[^"\n]*"|\'[^\'\n]*\'|\([^\)\n]*\)))?[ \t]*$',
 )
 REFERENCE_USE_RE = re.compile(
-    r'(?P<image>!)?\[(?P<text>[^\]\n]+)\]\[(?P<label>[^\]\n]*)\]',
+    r'(?P<image>!)?\[(?P<text>[^\]\n]*)\]\[(?P<label>[^\]\n]*)\]',
 )
 SHORTCUT_REFERENCE_RE = re.compile(
     r'(?P<image>!)?\[(?P<label>[^\]\n]+)\](?![\[(])',
@@ -666,7 +666,11 @@ def _validate_links(root: Path, markdown: dict[str, str], issues: list[Validatio
         reference_targets: set[tuple[str, bool]] = set()
         for match in REFERENCE_USE_RE.finditer(link_content):
             occupied.append(match.span())
-            label = match.group('label') or match.group('text')
+            text = match.group('text')
+            label = match.group('label')
+            if not text and not label:
+                continue
+            label = label or text
             normalized = _normalize_reference_label(label)
             target = definitions.get(normalized)
             if target is None:
