@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "destinationDescriptor": "public-standalone-working-tree",
-  "capturedAt": "2026-08-01T12:10:36Z",
+  "capturedAt": "2026-08-01T12:24:05Z",
   "excludedPaths": [
     "docs/destination-inventory.json",
     "docs/source-inventory.json"
@@ -14,13 +14,13 @@
     },
     {
       "path": ".github/workflows/build-book.yml",
-      "bytes": 7942,
-      "sha256": "cd55d9f3f186f36080226167f4021e7ea74253ed14d3b14b2a4fa605ddec4991"
+      "bytes": 7993,
+      "sha256": "3d82e34c6e983d7c0738409e079c06445d6c389226aa3bcd72f67df94f89d026"
     },
     {
       "path": ".github/workflows/validate.yml",
-      "bytes": 5647,
-      "sha256": "f07e56cba2c09cc5b8bd2a6b993ed190f7536037f0c646d85e802d4d584ef155"
+      "bytes": 5749,
+      "sha256": "31432e0f45805597e22ff29c599fe5d7a918e8f7f4137ca856d110f11499ae5e"
     },
     {
       "path": ".gitignore",
@@ -949,8 +949,8 @@
     },
     {
       "path": "docs/dependency-review.md",
-      "bytes": 8664,
-      "sha256": "cdc655625fc1ed26abaf12815991f441bf3d3594cf23c716b710af96359be64c"
+      "bytes": 8899,
+      "sha256": "1759f2f56a5f8b5600c11a3b9f54dbdec75a0af6ef75cdd93308a51336d82da7"
     },
     {
       "path": "docs/provenance.md",
@@ -1089,8 +1089,8 @@
     },
     {
       "path": "tests/test_github_workflows.py",
-      "bytes": 9517,
-      "sha256": "b337d1555ce7bceace948e9748aa8c3f59e2c2172b3adfa330e082d84dd0105b"
+      "bytes": 11336,
+      "sha256": "0f3d83df4473522e0243bcb1de3060526a44cb6f1f17631ba6a70ec801e0d692"
     },
     {
       "path": "tests/test_validate_repository.py",

@@ -56,6 +56,26 @@ def job_block(text: str, job_name: str) -> str:
     return text[start:end]
 
 
+def step_blocks(text: str) -> tuple[str, ...]:
+    """Return top-level step blocks from a workflow without parsing shell text."""
+    blocks: list[list[str]] = []
+    current: list[str] | None = None
+    for line in text.splitlines(keepends=True):
+        if line.startswith('      - name: '):
+            if current is not None:
+                blocks.append(current)
+            current = [line]
+        elif current is not None:
+            if line.startswith('  ') and line.strip() and not line.startswith('        '):
+                blocks.append(current)
+                current = None
+            else:
+                current.append(line)
+    if current is not None:
+        blocks.append(current)
+    return tuple(''.join(block) for block in blocks)
+
+
 class GitHubWorkflowContractTests(unittest.TestCase):
     def test_validate_exposes_exact_required_check_contexts(self) -> None:
         text = workflow_text(VALIDATE)
@@ -104,17 +124,45 @@ class GitHubWorkflowContractTests(unittest.TestCase):
     def test_expected_action_releases_are_selected(self) -> None:
         text = workflow_text(VALIDATE) + '\n' + workflow_text(BUILD)
         expected = {
-            'actions/checkout': 'v7.0.1',
-            'actions/cache': 'v6.1.0',
-            'actions/setup-python': 'v6.2.0',
-            'actions/upload-artifact': 'v7.0.1',
-            'actions/download-artifact': 'v8.0.1',
+            'actions/checkout': (
+                '3d3c42e5aac5ba805825da76410c181273ba90b1',
+                'v7.0.1',
+            ),
+            'actions/cache': (
+                '55cc8345863c7cc4c66a329aec7e433d2d1c52a9',
+                'v6.1.0',
+            ),
+            'actions/setup-python': (
+                '5fda3b95a4ea91299a34e894583c3862153e4b97',
+                'v7.0.0',
+            ),
+            'actions/upload-artifact': (
+                '043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
+                'v7.0.1',
+            ),
+            'actions/download-artifact': (
+                '3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c',
+                'v8.0.1',
+            ),
         }
         selected = {
-            action: comment
-            for action, _revision, comment in external_action_uses(text)
+            action: (revision, comment)
+            for action, revision, comment in external_action_uses(text)
         }
         self.assertEqual(selected, expected)
+
+    def test_every_checkout_disables_persisted_credentials(self) -> None:
+        checkout_steps = tuple(
+            step
+            for text in (workflow_text(VALIDATE), workflow_text(BUILD))
+            for step in step_blocks(text)
+            if 'uses: actions/checkout@' in step
+        )
+        self.assertEqual(len(checkout_steps), 3)
+        for step in checkout_steps:
+            with self.subTest(step=step.splitlines()[0].strip()):
+                self.assertIn('        with:\n', step)
+                self.assertIn('          persist-credentials: false\n', step)
 
     def test_workflows_default_to_read_only_permissions(self) -> None:
         for path in (VALIDATE, BUILD):
@@ -201,7 +249,7 @@ class GitHubWorkflowContractTests(unittest.TestCase):
             '3d3c42e5aac5ba805825da76410c181273ba90b1',
             '55cc8345863c7cc4c66a329aec7e433d2d1c52a9',
             '043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
-            'a309ff8b426b58ec0e2a45f0f869d46889d02405',
+            '5fda3b95a4ea91299a34e894583c3862153e4b97',
             '3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c',
             'license',
             'security',
