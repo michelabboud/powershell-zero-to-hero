@@ -5,7 +5,7 @@ Thank you for helping improve *PowerShell: Zero to Hero*.
 ## Requirements
 
 - PowerShell 7.4 or later
-- Pester 5.5 or later
+- Pester 5.7.1 or later
 - Python 3
 - Pandoc 3.1 or later
 - Typst 0.14 or later and the Libertinus Serif font
@@ -29,7 +29,7 @@ python3 tests/test-publication-contract.py
 Run the answer tests:
 
 ```bash
-pwsh ./tests/run-all.ps1
+pwsh ./tests/Run-AllTests.ps1
 ```
 
 Validate the build inputs and toolchain, then build all four current artifacts:

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "destinationDescriptor": "public-standalone-working-tree",
-  "capturedAt": "2026-08-01T12:24:05Z",
+  "capturedAt": "2026-08-01T12:34:04Z",
   "excludedPaths": [
     "docs/destination-inventory.json",
     "docs/source-inventory.json"
@@ -28,9 +28,19 @@
       "sha256": "92f0c87f175a6a1d40cd52e50f52cb60bdce0d0196fec7ef483dff9528dce027"
     },
     {
+      "path": "ARCHITECTURE.md",
+      "bytes": 1544,
+      "sha256": "b3c1ab3e72de2783f4093fd702e917e7eaf12f71857ba7a92f6b22ff4fe4e491"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "bytes": 1085,
+      "sha256": "adfd325b9d84d9f00b35c9ae54adfb370fcd0118a82aa919fa7678f5385b53c7"
+    },
+    {
       "path": "CONTRIBUTING.md",
-      "bytes": 1284,
-      "sha256": "8e3defb219afeb25741be48cfdda32beea754631d753223afd491073fe4b74a0"
+      "bytes": 1291,
+      "sha256": "d95ff5350de87f6ef625134add8c83d1a80bee2b02a11bea577d69c1931c29fa"
     },
     {
       "path": "LICENSE",
@@ -38,9 +48,14 @@
       "sha256": "28c465766f1b5095a7586c9072ebb57400f8fe433710ded32ea1e4471422d530"
     },
     {
+      "path": "PROGRESS.md",
+      "bytes": 883,
+      "sha256": "fc17d84eefcfe85a14e330a98fd541bccfa29d3b6e645d64abf6d1a010205c66"
+    },
+    {
       "path": "README.md",
-      "bytes": 4264,
-      "sha256": "522b4670c894078d8b62d5ad99c79f7c18382ec6e833ea41044620ca74f07748"
+      "bytes": 5642,
+      "sha256": "3608f05391d2e23747cddf30dc826f1f9b6441a244df8856b54c490a5bc50278"
     },
     {
       "path": "VERSION",
@@ -1079,8 +1094,8 @@
     },
     {
       "path": "tests/test-publication-contract.py",
-      "bytes": 11427,
-      "sha256": "0a8d76984ce85bbc0728029a47652f729f4df6533e0316edc9707ff367de5399"
+      "bytes": 13461,
+      "sha256": "d0d5bfe603b06ef2d551c1f5887e96804505f7bab62509c09eb166fa742f1f8e"
     },
     {
       "path": "tests/test_build_book.py",

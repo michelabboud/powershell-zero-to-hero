@@ -24,6 +24,7 @@ INVENTORY_EXCLUSIONS = {
     'docs/source-inventory.json',
 }
 FLOW_MARKER = 'PUBLICATION PIPELINE FLOW PROBE 7B3A9C'
+CANONICAL_REPOSITORY = 'https://github.com/michelabboud/powershell-zero-to-hero'
 
 
 def sha256(path: Path) -> str:
@@ -138,6 +139,47 @@ class InventoryContractTests(unittest.TestCase):
             path = ROOT / entry['path']
             self.assertEqual(path.stat().st_size, entry['bytes'], entry['path'])
             self.assertEqual(sha256(path), entry['sha256'], entry['path'])
+
+
+class ReleaseDocumentationContractTests(unittest.TestCase):
+    def test_required_repository_documents_are_present(self) -> None:
+        for relative in (
+            'ARCHITECTURE.md',
+            'CHANGELOG.md',
+            'LICENSE',
+            'PROGRESS.md',
+            'README.md',
+            'VERSION',
+        ):
+            with self.subTest(relative=relative):
+                self.assertTrue((ROOT / relative).is_file(), relative)
+
+    def test_readme_publishes_canonical_repository_and_badges(self) -> None:
+        text = (ROOT / 'README.md').read_text(encoding='utf-8')
+        self.assertIn(CANONICAL_REPOSITORY, text)
+        self.assertIn('actions/workflows/validate.yml/badge.svg?branch=main', text)
+        self.assertIn('actions/workflows/build-book.yml/badge.svg?branch=main', text)
+        self.assertIn('LICENSE', text)
+
+    def test_readme_explains_build_artifacts_and_releases(self) -> None:
+        text = (ROOT / 'README.md').read_text(encoding='utf-8')
+        self.assertIn('python3 scripts/build_book.py --edition all --format all', text)
+        self.assertIn('actions', text.casefold())
+        self.assertIn('releases/latest', text)
+        self.assertIn('SHA256SUMS', text)
+        self.assertIn('historical', text.casefold())
+
+    def test_changelog_records_the_public_v1_1_0_release(self) -> None:
+        text = (ROOT / 'CHANGELOG.md').read_text(encoding='utf-8')
+        self.assertIn('## [1.1.0] - 2026-08-01', text)
+        self.assertIn(f'[1.1.0]: {CANONICAL_REPOSITORY}/releases/tag/v1.1.0', text)
+        self.assertEqual((ROOT / 'VERSION').read_text(encoding='utf-8').strip(), '1.1.0')
+
+    def test_contributor_commands_use_the_canonical_pester_runner(self) -> None:
+        text = (ROOT / 'CONTRIBUTING.md').read_text(encoding='utf-8')
+        self.assertIn('Pester 5.7.1 or later', text)
+        self.assertIn('pwsh ./tests/Run-AllTests.ps1', text)
+        self.assertNotIn('tests/run-all.ps1', text)
 
 
 class BuildPipelineTests(unittest.TestCase):

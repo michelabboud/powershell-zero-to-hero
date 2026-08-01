@@ -1,12 +1,21 @@
 # PowerShell: Zero to Hero
 
+[![Validate](https://github.com/michelabboud/powershell-zero-to-hero/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/michelabboud/powershell-zero-to-hero/actions/workflows/validate.yml)
+[![Build book](https://github.com/michelabboud/powershell-zero-to-hero/actions/workflows/build-book.yml/badge.svg?branch=main)](https://github.com/michelabboud/powershell-zero-to-hero/actions/workflows/build-book.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A comprehensive illustrated training guide for tech professionals.
+
+Canonical repository: <https://github.com/michelabboud/powershell-zero-to-hero>
 
 ## Quick Start
 
 1. Read the chapters in `chapters/` (00-preface through 17)
 2. Try the exercises at the end of each chapter
 3. Check your work against `answers/`
+
+Readers who do not need the editable sources can download the current PDF or
+HTML editions from the [latest GitHub Release](https://github.com/michelabboud/powershell-zero-to-hero/releases/latest).
 
 ## Building the Book
 
@@ -84,6 +93,18 @@ their `SHA256SUMS` file. Tag runs attach those same five files to the matching
 GitHub Release. The tracked root `powershell-zero-to-hero.pdf` remains the
 immutable historical edition and is never uploaded as a generated artifact.
 
+Workflow artifacts are short-lived verification outputs attached to an Actions
+run. Published releases are the durable distribution channel. Each release
+contains the four regenerated books and `SHA256SUMS`; verify a download from the
+directory containing those five files with:
+
+```bash
+sha256sum --check SHA256SUMS
+```
+
+The historical root PDF is preserved only as provenance and is intentionally
+excluded from release assets.
+
 All external actions use full commit SHAs with version comments. Python,
 PowerShell, Pester, Pandoc, Typst, actionlint, and the Libertinus font archive
 are exact-version inputs; downloaded archives are checksum-verified. See
@@ -104,3 +125,8 @@ security review, and update procedure.
 
 The root `powershell-zero-to-hero.pdf` is the byte-preserved historical edition.
 Never overwrite it; current local editions are generated under `dist/`.
+
+## License
+
+The guide sources, scripts, and original repository materials are available
+under the [MIT License](LICENSE). Copyright (c) 2026 Michel Abboud.
