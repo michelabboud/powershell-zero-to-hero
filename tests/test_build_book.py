@@ -274,6 +274,23 @@ class BuildBookTests(unittest.TestCase):
 
             self.assertEqual((root / 'probe.txt').read_text(encoding='utf-8'), 'ok')
 
+    def test_typst_image_rewrite_handles_current_pandoc_wrappers(self) -> None:
+        module = load_module('build_book_typst_image_rewrite_test', BUILDER)
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            body = Path(temporary_directory) / 'main-body.typ'
+            body.write_text(
+                '#box(image("assets/images/wrapped.png", alt: "wrapped"))\n'
+                '#image("assets/images/direct.png")\n',
+                encoding='utf-8',
+            )
+
+            module._rewrite_typst_body(body)
+
+            rewritten = body.read_text(encoding='utf-8')
+            self.assertIn('image("../assets/images/wrapped.png"', rewritten)
+            self.assertIn('image("../assets/images/direct.png"', rewritten)
+            self.assertNotIn('image("assets/images/', rewritten)
+
     def test_manifest_is_the_only_edition_and_output_metadata_source(self) -> None:
         module = load_module('build_book_manifest_test', BUILDER)
         self.assertTrue(hasattr(module, 'load_manifest'), 'load_manifest must exist')

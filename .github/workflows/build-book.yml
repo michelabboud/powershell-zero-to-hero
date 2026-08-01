@@ -1,0 +1,206 @@
+name: build-book
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-book-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+
+env:
+  PYTHON_VERSION: '3.12.13'
+  PANDOC_VERSION: '3.10.1'
+  TYPST_VERSION: '0.15.1'
+  LIBERTINUS_VERSION: '7.051'
+  PANDOC_SHA256: '72948bf5784f560d5ad1876709daca27e0667f262da727bb33f77b58e52df2f5'
+  TYPST_SHA256: 'a6d077d0a95eed5a2eba715b2dae06be954f624ccbf85758a03f389ded33118c'
+  LIBERTINUS_SHA256: '4d9be29b5cb380c35af8ba967abcc752ad1e07be1f738a9789c33e0dd7478c92'
+
+jobs:
+  validation:
+    name: validation
+    permissions:
+      contents: read
+    uses: ./.github/workflows/validate.yml
+
+  all-formats:
+    name: all-formats
+    needs: validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Restore the exact document toolchain
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.tool_cache }}/pandoc/3.10.1
+            ${{ runner.tool_cache }}/typst/0.15.1
+            ${{ runner.tool_cache }}/libertinus/7.051
+          key: book-tools-${{ runner.os }}-${{ runner.arch }}-pandoc-3.10.1-typst-0.15.1-libertinus-7.051
+
+      - name: Install Pandoc, Typst, and Libertinus from official releases
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          pandoc_root="$RUNNER_TOOL_CACHE/pandoc/$PANDOC_VERSION"
+          if [[ ! -x "$pandoc_root/bin/pandoc" ]]; then
+            pandoc_archive="$RUNNER_TEMP/pandoc.tar.gz"
+            mkdir -p "$pandoc_root"
+            curl --fail --location --silent --show-error \
+              --output "$pandoc_archive" \
+              "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-linux-amd64.tar.gz"
+            printf '%s  %s\n' "$PANDOC_SHA256" "$pandoc_archive" | sha256sum --check
+            tar --extract --gzip --file "$pandoc_archive" --strip-components=1 --directory "$pandoc_root"
+          fi
+
+          typst_root="$RUNNER_TOOL_CACHE/typst/$TYPST_VERSION"
+          if [[ ! -x "$typst_root/typst" ]]; then
+            typst_archive="$RUNNER_TEMP/typst.tar.xz"
+            mkdir -p "$typst_root"
+            curl --fail --location --silent --show-error \
+              --output "$typst_archive" \
+              "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-x86_64-unknown-linux-musl.tar.xz"
+            printf '%s  %s\n' "$TYPST_SHA256" "$typst_archive" | sha256sum --check
+            tar --extract --xz --file "$typst_archive" --strip-components=1 --directory "$typst_root"
+          fi
+
+          libertinus_root="$RUNNER_TOOL_CACHE/libertinus/$LIBERTINUS_VERSION"
+          font_path="$libertinus_root/Libertinus-${LIBERTINUS_VERSION}/static/OTF"
+          if [[ ! -f "$font_path/LibertinusSerif-Regular.otf" ]]; then
+            libertinus_archive="$RUNNER_TEMP/libertinus.zip"
+            mkdir -p "$libertinus_root"
+            curl --fail --location --silent --show-error \
+              --output "$libertinus_archive" \
+              "https://github.com/alerque/libertinus/releases/download/v${LIBERTINUS_VERSION}/Libertinus-${LIBERTINUS_VERSION}.zip"
+            printf '%s  %s\n' "$LIBERTINUS_SHA256" "$libertinus_archive" | sha256sum --check
+            unzip -q "$libertinus_archive" -d "$libertinus_root"
+          fi
+
+          printf '%s\n' "$pandoc_root/bin" "$typst_root" >> "$GITHUB_PATH"
+          printf 'TYPST_FONT_PATHS=%s\n' "$font_path" >> "$GITHUB_ENV"
+
+      - name: Verify exact tool versions and required font
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(python -c 'import platform; print(platform.python_version())')" == "$PYTHON_VERSION" ]]
+          [[ "$(pandoc --version | head -n 1)" == "pandoc $PANDOC_VERSION" ]]
+          [[ "$(typst --version)" == "typst $TYPST_VERSION"* ]]
+          typst fonts | grep --fixed-strings --line-regexp 'Libertinus Serif'
+
+      - name: Validate and build both editions in every format
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/validate_repository.py
+          python scripts/build_book.py --check
+          python scripts/build_book.py --edition all --format all
+
+          book_outputs=(
+            dist/powershell-zero-to-hero.pdf
+            dist/powershell-zero-to-hero.html
+            dist/powershell-zero-to-hero-answer-booklet.pdf
+            dist/powershell-zero-to-hero-answer-booklet.html
+          )
+          for output in "${book_outputs[@]}"; do
+            [[ -s "$output" ]]
+          done
+          (
+            cd dist
+            sha256sum \
+              powershell-zero-to-hero.pdf \
+              powershell-zero-to-hero.html \
+              powershell-zero-to-hero-answer-booklet.pdf \
+              powershell-zero-to-hero-answer-booklet.html \
+              > SHA256SUMS
+            sha256sum --check SHA256SUMS
+          )
+
+      - name: Upload generated books
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: powershell-zero-to-hero-books
+          path: |
+            dist/powershell-zero-to-hero.pdf
+            dist/powershell-zero-to-hero.html
+            dist/powershell-zero-to-hero-answer-booklet.pdf
+            dist/powershell-zero-to-hero-answer-booklet.html
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload generated checksums
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: powershell-zero-to-hero-checksums
+          path: dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: release
+    needs: all-formats
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download generated books
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: powershell-zero-to-hero-books
+          path: release-assets/books
+
+      - name: Download generated checksums
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: powershell-zero-to-hero-checksums
+          path: release-assets/checksums
+
+      - name: Verify and publish the exact tag assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          (
+            cd release-assets/books
+            sha256sum --check ../checksums/SHA256SUMS
+          )
+
+          release_tag="$GITHUB_REF_NAME"
+          release_assets=(
+            release-assets/books/powershell-zero-to-hero.pdf
+            release-assets/books/powershell-zero-to-hero.html
+            release-assets/books/powershell-zero-to-hero-answer-booklet.pdf
+            release-assets/books/powershell-zero-to-hero-answer-booklet.html
+            release-assets/checksums/SHA256SUMS
+          )
+          gh --version
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            gh release upload "$release_tag" "${release_assets[@]}" --clobber
+          else
+            gh release create "$release_tag" "${release_assets[@]}" \
+              --verify-tag \
+              --title "PowerShell: Zero to Hero $release_tag" \
+              --generate-notes
+          fi

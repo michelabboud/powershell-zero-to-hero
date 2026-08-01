@@ -65,6 +65,31 @@ PowerShell 7.6.4 and Pester 6.0.1 while retaining Pester 5.7.1 compatibility.
 pwsh ./tests/Run-AllTests.ps1
 ```
 
+## Continuous Integration
+
+GitHub Actions runs the same standalone checks on every push and pull request.
+The stable check contexts are:
+
+- `validate / repository` -- Python contracts, repository validation, and
+  actionlint
+- `validate / pester` -- the complete answer test suite on the pinned
+  PowerShell and Pester releases
+- `build-book / all-formats` -- both editions as PDF and HTML after reusable
+  validation succeeds
+
+The book build also supports manual dispatches and `v*` tags. Successful builds
+upload exactly two workflow artifacts: `powershell-zero-to-hero-books` contains
+the four newly generated books, and `powershell-zero-to-hero-checksums` contains
+their `SHA256SUMS` file. Tag runs attach those same five files to the matching
+GitHub Release. The tracked root `powershell-zero-to-hero.pdf` remains the
+immutable historical edition and is never uploaded as a generated artifact.
+
+All external actions use full commit SHAs with version comments. Python,
+PowerShell, Pester, Pandoc, Typst, actionlint, and the Libertinus font archive
+are exact-version inputs; downloaded archives are checksum-verified. See
+[`docs/dependency-review.md`](docs/dependency-review.md) for sources, licenses,
+security review, and update procedure.
+
 ## Structure
 
 - `chapters/` -- 17 chapters + preface (the main guide)

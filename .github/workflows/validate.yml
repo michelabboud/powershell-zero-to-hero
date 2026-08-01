@@ -1,0 +1,144 @@
+name: validate
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: '3.12.13'
+  POWERSHELL_VERSION: '7.6.4'
+  PESTER_VERSION: '6.0.1'
+  ACTIONLINT_VERSION: '1.7.12'
+  POWERSHELL_SHA256: '4471b5a36bfe86ec7af8525d36bb1cacba0128e7aac22d05cc064bc00e604721'
+  ACTIONLINT_SHA256: '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8'
+
+jobs:
+  repository:
+    name: repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Verify the exact Python runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import platform
+
+          expected = os.environ['PYTHON_VERSION']
+          actual = platform.python_version()
+          if actual != expected:
+              raise SystemExit(f'expected Python {expected}, found {actual}')
+          print(f'Python {actual}')
+          PY
+
+      - name: Install actionlint from its official release
+        shell: bash
+        run: |
+          set -euo pipefail
+          actionlint_root="$RUNNER_TOOL_CACHE/actionlint/$ACTIONLINT_VERSION"
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          mkdir -p "$actionlint_root"
+          curl --fail --location --silent --show-error \
+            --output "$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          printf '%s  %s\n' "$ACTIONLINT_SHA256" "$archive" | sha256sum --check
+          tar --extract --gzip --file "$archive" --directory "$actionlint_root" actionlint
+          chmod +x "$actionlint_root/actionlint"
+          "$actionlint_root/actionlint" -version
+          printf '%s\n' "$actionlint_root" >> "$GITHUB_PATH"
+
+      - name: Run repository contracts and validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          actionlint
+          python -m unittest discover -s tests -p 'test_*.py'
+          python scripts/validate_repository.py
+
+  pester:
+    name: pester
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Restore the exact PowerShell and Pester toolchain
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.tool_cache }}/powershell/7.6.4
+            ${{ runner.tool_cache }}/pester/6.0.1
+          key: powershell-${{ runner.os }}-${{ runner.arch }}-7.6.4-pester-6.0.1
+
+      - name: Install PowerShell from its official release
+        shell: bash
+        run: |
+          set -euo pipefail
+          powershell_root="$RUNNER_TOOL_CACHE/powershell/$POWERSHELL_VERSION"
+          if [[ ! -x "$powershell_root/pwsh" ]]; then
+            archive="$RUNNER_TEMP/powershell.tar.gz"
+            mkdir -p "$powershell_root"
+            curl --fail --location --silent --show-error \
+              --output "$archive" \
+              "https://github.com/PowerShell/PowerShell/releases/download/v${POWERSHELL_VERSION}/powershell-${POWERSHELL_VERSION}-linux-x64.tar.gz"
+            printf '%s  %s\n' "$POWERSHELL_SHA256" "$archive" | sha256sum --check
+            tar --extract --gzip --file "$archive" --directory "$powershell_root"
+            chmod +x "$powershell_root/pwsh"
+          fi
+          printf '%s\n' "$powershell_root" >> "$GITHUB_PATH"
+
+      - name: Install and verify the exact Pester release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $actualPowerShell = $PSVersionTable.PSVersion.ToString()
+          if ($actualPowerShell -ne $env:POWERSHELL_VERSION) {
+              throw "Expected PowerShell $env:POWERSHELL_VERSION, found $actualPowerShell"
+          }
+
+          $pesterRoot = Join-Path $env:RUNNER_TOOL_CACHE "pester/$env:PESTER_VERSION"
+          $versionedModule = Join-Path $pesterRoot "Pester/$env:PESTER_VERSION"
+          if (-not (Test-Path -LiteralPath $versionedModule -PathType Container)) {
+              New-Item -Path $pesterRoot -ItemType Directory -Force | Out-Null
+              Save-PSResource -Name Pester -Version $env:PESTER_VERSION `
+                  -Repository PSGallery -Path $pesterRoot -TrustRepository `
+                  -AcceptLicense -Quiet
+          }
+          $env:PSModulePath = $pesterRoot + [IO.Path]::PathSeparator + $env:PSModulePath
+          $pester = Get-Module -ListAvailable -Name Pester |
+              Where-Object Version -EQ ([version]$env:PESTER_VERSION) |
+              Select-Object -First 1
+          if ($null -eq $pester) {
+              throw "Pester $env:PESTER_VERSION was not found under the verified tool cache"
+          }
+          Import-Module Pester -RequiredVersion $env:PESTER_VERSION -Force
+          $actualPester = (Get-Module Pester).Version.ToString()
+          if ($actualPester -ne $env:PESTER_VERSION) {
+              throw "Expected Pester $env:PESTER_VERSION, found $actualPester"
+          }
+          "PowerShell $actualPowerShell; Pester $actualPester"
+
+      - name: Run all answer tests
+        shell: pwsh
+        run: ./tests/Run-AllTests.ps1

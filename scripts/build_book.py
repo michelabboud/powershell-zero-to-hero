@@ -224,7 +224,7 @@ def _copy_referenced_images(
 
 def _rewrite_typst_body(path: Path) -> None:
     body = path.read_text(encoding='utf-8')
-    body = body.replace('#image("assets/images/', '#image("../assets/images/')
+    body = body.replace('image("assets/images/', 'image("../assets/images/')
     body = body.replace('\\\\newpage', '#pagebreak()')
     body = body.replace('\\newpage', '#pagebreak()')
     body = (

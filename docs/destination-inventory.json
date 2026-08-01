@@ -1,12 +1,27 @@
 {
   "schemaVersion": 1,
   "destinationDescriptor": "public-standalone-working-tree",
-  "capturedAt": "2026-08-01T11:40:21.618049Z",
+  "capturedAt": "2026-08-01T12:10:36Z",
   "excludedPaths": [
     "docs/destination-inventory.json",
     "docs/source-inventory.json"
   ],
   "files": [
+    {
+      "path": ".github/dependabot.yml",
+      "bytes": 269,
+      "sha256": "9947e9da6d675c207d2a2f3c7d01ae2fca9ad00ea0f2922b33fcd506fc97d010"
+    },
+    {
+      "path": ".github/workflows/build-book.yml",
+      "bytes": 7942,
+      "sha256": "cd55d9f3f186f36080226167f4021e7ea74253ed14d3b14b2a4fa605ddec4991"
+    },
+    {
+      "path": ".github/workflows/validate.yml",
+      "bytes": 5647,
+      "sha256": "f07e56cba2c09cc5b8bd2a6b993ed190f7536037f0c646d85e802d4d584ef155"
+    },
     {
       "path": ".gitignore",
       "bytes": 173,
@@ -24,8 +39,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 3019,
-      "sha256": "33427dfd191842a7cf84cbe45b5f59fa52ef621e476effc99d132c2c4e48287e"
+      "bytes": 4264,
+      "sha256": "522b4670c894078d8b62d5ad99c79f7c18382ec6e833ea41044620ca74f07748"
     },
     {
       "path": "VERSION",
@@ -933,6 +948,11 @@
       "sha256": "91af41ba74986531d39124c87b428e28a3479613246cc5dc2b2574fb4bf3f709"
     },
     {
+      "path": "docs/dependency-review.md",
+      "bytes": 8664,
+      "sha256": "cdc655625fc1ed26abaf12815991f441bf3d3594cf23c716b710af96359be64c"
+    },
+    {
       "path": "docs/provenance.md",
       "bytes": 2521,
       "sha256": "63c7c310cd2c5ea2e5cfd1db978045d61db41537d62da126ac84da7a7148f1ec"
@@ -954,8 +974,8 @@
     },
     {
       "path": "scripts/build_book.py",
-      "bytes": 14325,
-      "sha256": "08d519e17d52fb73f877c6b6ebf025a51fec0a7a3d4c40ecd9d715217ce85cb0"
+      "bytes": 14323,
+      "sha256": "1233fb070ce44d1c42eeae459a6542bd2d0038c7924004bd52b180a368be3cf5"
     },
     {
       "path": "scripts/managed_outputs.py",
@@ -1064,8 +1084,13 @@
     },
     {
       "path": "tests/test_build_book.py",
-      "bytes": 36557,
-      "sha256": "87a3e46ccef05239bca91845a669b5852d0a20691e49577491c2fdd43cd8f7aa"
+      "bytes": 37377,
+      "sha256": "48e19abce72b6259bdd05155ba1721f2632f7b113eb0ac6bf0f2e26e27115236"
+    },
+    {
+      "path": "tests/test_github_workflows.py",
+      "bytes": 9517,
+      "sha256": "b337d1555ce7bceace948e9748aa8c3f59e2c2172b3adfa330e082d84dd0105b"
     },
     {
       "path": "tests/test_validate_repository.py",
