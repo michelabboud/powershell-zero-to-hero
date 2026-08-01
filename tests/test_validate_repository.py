@@ -192,12 +192,45 @@ class ValidatorTests(unittest.TestCase):
         code: str,
         path: str,
     ) -> None:
-        prefix = f'{code}|{path}|'
+        records: list[dict[str, str]] = []
+        for line in result.stdout.splitlines():
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                fields = line.split('|', 2)
+                if len(fields) == 3:
+                    records.append(
+                        {'code': fields[0], 'path': fields[1], 'message': fields[2]},
+                    )
+            else:
+                if isinstance(record, dict) and all(
+                    isinstance(record.get(field), str)
+                    for field in ('code', 'path', 'message')
+                ):
+                    records.append(record)
         self.assertTrue(
-            any(line.startswith(prefix) for line in result.stdout.splitlines()),
-            f'missing diagnostic {prefix!r}; stdout={result.stdout!r}; stderr={result.stderr!r}',
+            any(record['code'] == code and record['path'] == path for record in records),
+            f'missing diagnostic {(code, path)!r}; stdout={result.stdout!r}; stderr={result.stderr!r}',
         )
         self.assertEqual(result.returncode, 1)
+
+    def assert_cli_escapes_path(self, name: str) -> None:
+        relative = f'assets/{name}'
+        path = self.fixture.root / relative
+        path.write_text('untracked fixture', encoding='utf-8')
+
+        result = self.run_validator()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertTrue(result.stdout.endswith('\n'))
+        lines = result.stdout.splitlines()
+        self.assertEqual(lines, [result.stdout[:-1]])
+        line = lines[0]
+        self.assertNotIn('|', line)
+        self.assertFalse(any(ord(character) < 32 for character in line))
+        record = json.loads(line)
+        self.assertEqual(record['code'], 'inventory-unexpected')
+        self.assertEqual(record['path'], relative)
 
     def test_valid_repository_returns_success_without_mutation(self) -> None:
         before = sorted(
@@ -284,6 +317,90 @@ class ValidatorTests(unittest.TestCase):
         self.assertNotIn(marker, result.stdout)
         self.assertNotIn(marker, result.stderr)
 
+    def test_reports_broken_reference_style_link(self) -> None:
+        marker = 'missing-reference-target'
+        readme = self.fixture.root / 'README.md'
+        readme.write_text(
+            readme.read_text(encoding='utf-8')
+            + f'\n[Guide][guide]\n\n[guide]: {marker}.md\n',
+            encoding='utf-8',
+        )
+
+        result = self.run_validator()
+
+        self.assert_issue(result, 'link-missing', 'README.md')
+        self.assertNotIn(marker, result.stdout)
+
+    def test_reports_broken_reference_style_image(self) -> None:
+        marker = 'missing-reference-image'
+        readme = self.fixture.root / 'README.md'
+        readme.write_text(
+            readme.read_text(encoding='utf-8')
+            + f'\n![Diagram][diagram]\n\n[diagram]: assets/images/{marker}.png\n',
+            encoding='utf-8',
+        )
+
+        result = self.run_validator()
+
+        self.assert_issue(result, 'image-missing', 'README.md')
+        self.assertNotIn(marker, result.stdout)
+
+    def test_reports_missing_reference_definition(self) -> None:
+        readme = self.fixture.root / 'README.md'
+        readme.write_text(
+            readme.read_text(encoding='utf-8') + '\n[Guide][undefined-guide]\n',
+            encoding='utf-8',
+        )
+
+        result = self.run_validator()
+
+        self.assert_issue(result, 'reference-definition-missing', 'README.md')
+
+    def test_accepts_full_collapsed_shortcut_and_image_references(self) -> None:
+        readme = self.fixture.root / 'README.md'
+        readme.write_text(
+            readme.read_text(encoding='utf-8')
+            + (
+                '\n[Full][guide]\n'
+                '[guide][]\n'
+                '[guide]\n'
+                '![Diagram][diagram]\n\n'
+                '[guide]: chapters/01-what-is-powershell.md#chapter-01 "Guide"\n'
+                '[diagram]: <assets/images/example.png> "Diagram"\n'
+            ),
+            encoding='utf-8',
+        )
+        self.fixture.refresh_destination_inventory()
+
+        result = self.run_validator()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_ignores_reference_syntax_inside_inline_code(self) -> None:
+        readme = self.fixture.root / 'README.md'
+        readme.write_text(
+            readme.read_text(encoding='utf-8')
+            + "\n`$servers[0]['Name']` and `$servers[0][$keyName]`\n",
+            encoding='utf-8',
+        )
+        self.fixture.refresh_destination_inventory()
+
+        result = self.run_validator()
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_query_and_fragment_link_checks_fragment(self) -> None:
+        readme = self.fixture.root / 'README.md'
+        readme.write_text(
+            readme.read_text(encoding='utf-8')
+            + '\n[Missing section](README.md?plain=1#missing-section)\n',
+            encoding='utf-8',
+        )
+
+        result = self.run_validator()
+
+        self.assert_issue(result, 'anchor-missing', 'README.md')
+
     def test_reports_duplicate_heading_anchor(self) -> None:
         chapter = self.fixture.root / 'chapters/03-commands-and-cmdlets.md'
         chapter.write_text(
@@ -318,6 +435,17 @@ class ValidatorTests(unittest.TestCase):
         self.assert_issue(result, 'answer-missing', answer)
         self.assert_issue(result, 'test-missing', test)
 
+    def test_reports_missing_answer_and_test_exercise_coverage(self) -> None:
+        answer = self.fixture.root / 'answers/07-answers.md'
+        answer.write_text('# Chapter 07 -- Answers\n', encoding='utf-8')
+        test = self.fixture.root / 'tests/ch-11.tests.ps1'
+        test.write_text('Describe "Chapter 11" { }\n', encoding='utf-8')
+
+        result = self.run_validator()
+
+        self.assert_issue(result, 'answer-exercise-missing', 'answers/07-answers.md')
+        self.assert_issue(result, 'test-exercise-missing', 'tests/ch-11.tests.ps1')
+
     def test_reports_forbidden_file(self) -> None:
         suffix = '.' + 'vf' + '-' + 'bak'
         forbidden = f'assets/legacy{suffix}'
@@ -327,6 +455,30 @@ class ValidatorTests(unittest.TestCase):
         result = self.run_validator()
 
         self.assert_issue(result, 'forbidden-file', forbidden)
+
+    def test_reports_forbidden_backup_directory_after_inventory_refresh(self) -> None:
+        suffix = '.' + 'vf' + '-' + 'bak'
+        forbidden = f'assets/legacy{suffix}'
+        path = self.fixture.root / forbidden / 'image.png'
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b'backup image')
+        self.fixture.refresh_destination_inventory()
+
+        result = self.run_validator()
+
+        self.assert_issue(result, 'forbidden-file', forbidden)
+
+    def test_reports_mixed_case_forbidden_backup_component(self) -> None:
+        suffix = '.' + 'Vf' + '-' + 'BaK'
+        directory = f'assets/legacy{suffix}'
+        path = self.fixture.root / directory / 'content.txt'
+        path.parent.mkdir(parents=True)
+        path.write_text('backup content', encoding='utf-8')
+        self.fixture.refresh_destination_inventory()
+
+        result = self.run_validator()
+
+        self.assert_issue(result, 'forbidden-file', directory)
 
     def test_reports_nested_repository_metadata(self) -> None:
         forbidden = 'assets/vendor/.git'
@@ -361,6 +513,18 @@ class ValidatorTests(unittest.TestCase):
         result = self.run_validator()
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_cli_escapes_newline_in_filename(self) -> None:
+        self.assert_cli_escapes_path('line\nbreak.txt')
+
+    def test_cli_escapes_carriage_return_in_filename(self) -> None:
+        self.assert_cli_escapes_path('carriage\rreturn.txt')
+
+    def test_cli_escapes_escape_control_in_filename(self) -> None:
+        self.assert_cli_escapes_path('escape\x1bcontrol.txt')
+
+    def test_cli_escapes_pipe_in_filename(self) -> None:
+        self.assert_cli_escapes_path('pipe|name.txt')
 
     def test_reports_runtime_reference_but_allows_exact_creation_credit(self) -> None:
         brand = 'Visual' + ' Forge'

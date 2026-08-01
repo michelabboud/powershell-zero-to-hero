@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "destinationDescriptor": "public-standalone-working-tree",
-  "capturedAt": "2026-08-01T08:05:59Z",
+  "capturedAt": "2026-08-01T08:37:48Z",
   "excludedPaths": [
     "docs/destination-inventory.json",
     "docs/source-inventory.json"
@@ -944,8 +944,8 @@
     },
     {
       "path": "scripts/validate_repository.py",
-      "bytes": 29432,
-      "sha256": "a3fa426e10dffc008aedcc4fc201b1a2a59a5835918687146254b9425ea8273c"
+      "bytes": 34091,
+      "sha256": "3407942ebd1e7fe1ccf583b79a54d92e7b1dcca5e6dd6fe225e9aaace0df86ed"
     },
     {
       "path": "tests/ch-01.tests.ps1",
@@ -1044,8 +1044,8 @@
     },
     {
       "path": "tests/test_validate_repository.py",
-      "bytes": 17747,
-      "sha256": "7590a30279d57eee8bd55b4952cc3b48810f2f726aa12233ef13600eeb5a5a58"
+      "bytes": 24106,
+      "sha256": "169073b93e6b7a01d43b53609479a9fc4cf1a18aaaa05e866d05949e4a97aaf1"
     }
   ]
 }

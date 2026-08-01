@@ -89,6 +89,17 @@ HTML_ANCHOR_RE = re.compile(
 MARKDOWN_LINK_RE = re.compile(
     r'(?P<image>!)?\[[^\]]*\]\(\s*(?P<target><[^>]+>|[^)\s]+)(?:\s+[^)]*)?\)',
 )
+REFERENCE_DEFINITION_RE = re.compile(
+    r'^ {0,3}\[(?P<label>[^\]\n]+)\]:[ \t]*'
+    r'(?P<target><[^>\n]+>|[^ \t\n]+)'
+    r'(?:[ \t]+(?:"[^"\n]*"|\'[^\'\n]*\'|\([^\)\n]*\)))?[ \t]*$',
+)
+REFERENCE_USE_RE = re.compile(
+    r'(?P<image>!)?\[(?P<text>[^\]\n]+)\]\[(?P<label>[^\]\n]*)\]',
+)
+SHORTCUT_REFERENCE_RE = re.compile(
+    r'(?P<image>!)?\[(?P<label>[^\]\n]+)\](?![\[(])',
+)
 EXERCISE_RE = re.compile(r'\[Ch-(\d{2}),\s*Ex-(\d+)\]')
 ANSWER_RE = re.compile(r'^##\s+Ch-(\d{2}),\s*Ex-(\d+)\b', re.MULTILINE)
 TEST_RE = re.compile(r'\bIt\s+["\']Ex-(\d+)\b', re.IGNORECASE)
@@ -140,10 +151,26 @@ FORBIDDEN_SUFFIXES = (
     _joined('.', _joined('vf', 'bak', separator='-')),
     '.pem',
 )
+FORBIDDEN_SUFFIXES_CASEFOLDED = tuple(suffix.casefold() for suffix in FORBIDDEN_SUFFIXES)
+
+
+def _has_forbidden_suffix(component: str) -> bool:
+    folded = component.casefold()
+    return any(folded.endswith(suffix) for suffix in FORBIDDEN_SUFFIXES_CASEFOLDED)
 
 
 def _issue(code: str, path: str, message: str) -> ValidationIssue:
     return ValidationIssue(code=code, path=path, message=message)
+
+
+def _serialize_issue(issue: ValidationIssue) -> str:
+    serialized = json.dumps(
+        {'code': issue.code, 'message': issue.message, 'path': issue.path},
+        ensure_ascii=True,
+        separators=(',', ':'),
+        sort_keys=True,
+    )
+    return serialized.replace('|', '\\u007c')
 
 
 def _sha256(path: Path) -> str:
@@ -446,6 +473,32 @@ def _content_without_fences(text: str) -> str:
     return '\n'.join(output)
 
 
+def _content_without_inline_code(text: str) -> str:
+    output = list(text)
+    cursor = 0
+    while cursor < len(text):
+        if text[cursor] != '`':
+            cursor += 1
+            continue
+        end = cursor + 1
+        while end < len(text) and text[end] == '`':
+            end += 1
+        marker = text[cursor:end]
+        closing = re.search(
+            rf'(?<!`){re.escape(marker)}(?!`)',
+            text[end:],
+        )
+        if closing is None:
+            cursor = end
+            continue
+        closing_end = end + closing.end()
+        for index in range(cursor, closing_end):
+            if output[index] not in {'\n', '\r'}:
+                output[index] = ' '
+        cursor = closing_end
+    return ''.join(output)
+
+
 def _heading_anchor(heading: str) -> str:
     plain = re.sub(r'!\[([^\]]*)\]\([^)]*\)', r'\1', heading)
     plain = re.sub(r'\[([^\]]+)\]\([^)]*\)', r'\1', plain)
@@ -498,9 +551,87 @@ def _validate_anchors(root: Path, markdown: dict[str, str], issues: list[Validat
 
 def _split_local_target(target: str) -> tuple[str, str]:
     target = target[1:-1] if target.startswith('<') and target.endswith('>') else target
-    without_query = target.split('?', 1)[0]
-    path, separator, fragment = without_query.partition('#')
+    without_fragment, separator, fragment = target.partition('#')
+    path = without_fragment.split('?', 1)[0]
     return unquote(path), unquote(fragment) if separator else ''
+
+
+def _normalize_reference_label(label: str) -> str:
+    return re.sub(r'\s+', ' ', label.strip()).casefold()
+
+
+def _reference_definitions(
+    visible: str,
+) -> tuple[dict[str, str], str, bool]:
+    definitions: dict[str, str] = {}
+    content_lines: list[str] = []
+    duplicate = False
+    for line in visible.splitlines():
+        match = REFERENCE_DEFINITION_RE.match(line)
+        if match is None:
+            content_lines.append(line)
+            continue
+        label = _normalize_reference_label(match.group('label'))
+        if label in definitions:
+            duplicate = True
+        else:
+            definitions[label] = match.group('target')
+        content_lines.append('')
+    return definitions, '\n'.join(content_lines), duplicate
+
+
+def _overlaps(span: tuple[int, int], occupied: list[tuple[int, int]]) -> bool:
+    return any(span[0] < existing[1] and existing[0] < span[1] for existing in occupied)
+
+
+def _validate_markdown_target(
+    root: Path,
+    source: Path,
+    relative: str,
+    raw_target: str,
+    is_image: bool,
+    image_root: Path,
+    anchors_by_path: dict[str, set[str]],
+    issues: list[ValidationIssue],
+) -> None:
+    path_part, fragment = _split_local_target(raw_target)
+    lowered = path_part.casefold()
+    if any(lowered.startswith(f'{scheme}:') for scheme in EXTERNAL_SCHEMES):
+        return
+    if path_part.startswith(('/', '\\', '~')) or WINDOWS_ABSOLUTE_RE.match(path_part):
+        issues.append(_issue('absolute-path', relative, 'Markdown target must be repository-relative.'))
+        return
+    canonical_image_path = PurePosixPath(path_part)
+    if (
+        is_image
+        and len(canonical_image_path.parts) >= 2
+        and canonical_image_path.parts[:2] == ('assets', 'images')
+    ):
+        target = root.joinpath(*canonical_image_path.parts)
+    else:
+        target = source if not path_part else source.parent / Path(path_part)
+    try:
+        resolved = target.resolve(strict=False)
+        resolved.relative_to(root)
+    except (OSError, ValueError):
+        issues.append(_issue('path-escape', relative, 'Markdown target escapes the repository.'))
+        return
+    if is_image:
+        try:
+            resolved.relative_to(image_root)
+        except ValueError:
+            issues.append(_issue('image-path', relative, 'Image target must be under assets/images.'))
+            return
+        if not resolved.is_file() or resolved.is_symlink():
+            issues.append(_issue('image-missing', relative, 'Markdown image target is unavailable.'))
+            return
+    elif path_part and (not resolved.exists() or resolved.is_symlink()):
+        issues.append(_issue('link-missing', relative, 'Local Markdown target is unavailable.'))
+        return
+    if fragment and resolved.suffix.casefold() == '.md':
+        target_relative = _relative_path(root, resolved)
+        if fragment not in anchors_by_path.get(target_relative, set()):
+            issues.append(_issue('anchor-missing', relative, 'Markdown anchor target is unavailable.'))
 
 
 def _validate_links(root: Path, markdown: dict[str, str], issues: list[ValidationIssue]) -> None:
@@ -509,48 +640,62 @@ def _validate_links(root: Path, markdown: dict[str, str], issues: list[Validatio
     for relative, text in sorted(markdown.items()):
         visible = _content_without_fences(text)
         source = root / relative
-        for match in MARKDOWN_LINK_RE.finditer(visible):
-            raw_target = match.group('target')
-            path_part, fragment = _split_local_target(raw_target)
-            lowered = path_part.casefold()
-            if any(lowered.startswith(f'{scheme}:') for scheme in EXTERNAL_SCHEMES):
-                continue
-            if path_part.startswith(('/', '\\', '~')) or WINDOWS_ABSOLUTE_RE.match(path_part):
-                issues.append(_issue('absolute-path', relative, 'Markdown target must be repository-relative.'))
-                continue
-            is_image = match.group('image') is not None
-            canonical_image_path = PurePosixPath(path_part)
-            if (
-                is_image
-                and len(canonical_image_path.parts) >= 2
-                and canonical_image_path.parts[:2] == ('assets', 'images')
-            ):
-                target = root.joinpath(*canonical_image_path.parts)
-            else:
-                target = source if not path_part else source.parent / Path(path_part)
-            try:
-                resolved = target.resolve(strict=False)
-                resolved.relative_to(root.resolve(strict=True))
-            except (OSError, ValueError):
-                issues.append(_issue('path-escape', relative, 'Markdown target escapes the repository.'))
-                continue
-            if is_image:
-                try:
-                    resolved.relative_to(image_root)
-                except ValueError:
-                    issues.append(_issue('image-path', relative, 'Image target must be under assets/images.'))
-                    continue
-                if not resolved.is_file() or resolved.is_symlink():
-                    issues.append(_issue('image-missing', relative, 'Markdown image target is unavailable.'))
-                    continue
-            elif path_part and (not resolved.exists() or resolved.is_symlink()):
-                issues.append(_issue('link-missing', relative, 'Local Markdown target is unavailable.'))
-                continue
+        definitions, reference_content, duplicate_definition = _reference_definitions(visible)
+        link_content = _content_without_inline_code(reference_content)
+        if duplicate_definition:
+            issues.append(
+                _issue(
+                    'reference-definition-duplicate',
+                    relative,
+                    'Markdown document defines a reference label more than once.',
+                ),
+            )
+        occupied: list[tuple[int, int]] = []
+        for match in MARKDOWN_LINK_RE.finditer(link_content):
+            _validate_markdown_target(
+                root,
+                source,
+                relative,
+                match.group('target'),
+                match.group('image') is not None,
+                image_root,
+                anchors_by_path,
+                issues,
+            )
 
-            if fragment and resolved.suffix.casefold() == '.md':
-                target_relative = _relative_path(root, resolved)
-                if fragment not in anchors_by_path.get(target_relative, set()):
-                    issues.append(_issue('anchor-missing', relative, 'Markdown anchor target is unavailable.'))
+        reference_targets: set[tuple[str, bool]] = set()
+        for match in REFERENCE_USE_RE.finditer(link_content):
+            occupied.append(match.span())
+            label = match.group('label') or match.group('text')
+            normalized = _normalize_reference_label(label)
+            target = definitions.get(normalized)
+            if target is None:
+                issues.append(
+                    _issue(
+                        'reference-definition-missing',
+                        relative,
+                        'Markdown reference definition is unavailable.',
+                    ),
+                )
+                continue
+            reference_targets.add((target, match.group('image') is not None))
+        for match in SHORTCUT_REFERENCE_RE.finditer(link_content):
+            if _overlaps(match.span(), occupied):
+                continue
+            target = definitions.get(_normalize_reference_label(match.group('label')))
+            if target is not None:
+                reference_targets.add((target, match.group('image') is not None))
+        for raw_target, is_image in sorted(reference_targets):
+            _validate_markdown_target(
+                root,
+                source,
+                relative,
+                raw_target,
+                is_image,
+                image_root,
+                anchors_by_path,
+                issues,
+            )
 
 
 def _validate_answer_coverage(root: Path, issues: list[ValidationIssue]) -> None:
@@ -642,7 +787,11 @@ def _validate_publication_policy(root: Path, issues: list[ValidationIssue]) -> N
         for name in sorted(directory_names):
             path = current_path / name
             relative = _relative_path(root, path)
-            if path.is_symlink() or (name == '.git' and current_path != root):
+            if (
+                path.is_symlink()
+                or (name == '.git' and current_path != root)
+                or _has_forbidden_suffix(name)
+            ):
                 issues.append(_issue('forbidden-file', relative, 'Forbidden repository path is present.'))
         relative_directory = current_path.relative_to(root)
         directory_names[:] = [
@@ -659,7 +808,7 @@ def _validate_publication_policy(root: Path, issues: list[ValidationIssue]) -> N
         if (
             path.name in FORBIDDEN_NAMES
             or relative in FORBIDDEN_PATHS
-            or any(path.name.endswith(suffix) for suffix in FORBIDDEN_SUFFIXES)
+            or _has_forbidden_suffix(path.name)
         ):
             issues.append(_issue('forbidden-file', relative, 'Forbidden repository file is present.'))
 
@@ -753,7 +902,7 @@ def main(argv: list[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
     issues = validate_repository(arguments.root, arguments.manifest)
     for issue in issues:
-        print(f'{issue.code}|{issue.path}|{issue.message}')
+        print(_serialize_issue(issue))
     return 1 if issues else 0
 
 
