@@ -432,5 +432,5 @@ building it, write a validation block that:
 
 ---
 
-*Next up: [Chapter 05 -- Control Flow](05-control-flow.md), where we stop
-running single commands and start making decisions.*
+*Next up: [Chapter 05 -- Operators and Expressions](05-operators-and-expressions.md),
+where we learn how values combine, compare, and transform.*

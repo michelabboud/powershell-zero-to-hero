@@ -558,5 +558,5 @@ Verify that `$dog -is [Animal]` is `$true`, that `Describe()` uses the overridde
 
 ---
 
-*Next up: [Chapter 14 -- Error Handling](14-error-handling.md), where we learn that
-`-ErrorAction SilentlyContinue` is not a legitimate error handling strategy.*
+*Next up: [Chapter 14 -- Remoting and Jobs](14-remote-and-jobs.md), where we
+run work beyond the current PowerShell session.*

@@ -441,5 +441,5 @@ the assigned severity.
 
 ---
 
-*Next up: [Chapter 12 -- Error Handling and Debugging](12-error-handling.md), where we learn
-that errors are objects too, and `$Error[0]` is your new best friend.*
+*Next up: [Chapter 12 -- Modules and Packages](12-modules-and-packages.md), where
+we package reusable PowerShell for other people and projects.*

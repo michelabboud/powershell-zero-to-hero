@@ -594,4 +594,4 @@ has gone back to his coffee.
 
 ---
 
-*Next: [Chapter 07 -- Functions](07-functions.md)*
+*Next: [Chapter 07 -- Functions and Scripts](07-functions-and-scripts.md)*

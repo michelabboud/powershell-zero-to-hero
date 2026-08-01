@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "destinationDescriptor": "public-standalone-working-tree",
-  "capturedAt": "2026-08-01T07:27:30Z",
+  "capturedAt": "2026-08-01T08:05:59Z",
   "excludedPaths": [
     "docs/destination-inventory.json",
     "docs/source-inventory.json"
@@ -24,8 +24,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 1823,
-      "sha256": "0f8a673e8696c532d85e7c79761668908af46b39e8e594e494041f2b47e022d0"
+      "bytes": 2050,
+      "sha256": "d72a99caa3da8476eb4ef8642c5cda5e08db8e67c41a8a0c45f182f512750cec"
     },
     {
       "path": "VERSION",
@@ -864,8 +864,8 @@
     },
     {
       "path": "chapters/04-variables-and-types.md",
-      "bytes": 13174,
-      "sha256": "f9a745571493c8b635982810e3d74cd527174cd748cf6d717e47b06882b645b5"
+      "bytes": 13193,
+      "sha256": "e7230e0ecb8b64b00dac4781795e9654dfc87b62ed4ca6f86b56b96173ea8bbb"
     },
     {
       "path": "chapters/05-operators-and-expressions.md",
@@ -874,48 +874,48 @@
     },
     {
       "path": "chapters/06-control-flow.md",
-      "bytes": 16678,
-      "sha256": "6cff6b6c97025312820e9b6df92d5f9ea2ff5ca09640cbeca1162b7097a24bcf"
+      "bytes": 16702,
+      "sha256": "ea13648ff1a81dfccaeaf07af5b3eddd7a3d6f06eee730e518fb22167664968f"
     },
     {
       "path": "chapters/07-functions-and-scripts.md",
-      "bytes": 21482,
-      "sha256": "4e49d010260b4e99eae6a349a9f76697a5f664c2cf9a7d19458b2706033c9dbf"
+      "bytes": 21512,
+      "sha256": "cbcc676f90f5a11b250c8987dba99dcec1589f95053b9129c97bab2e1146d97d"
     },
     {
       "path": "chapters/08-the-pipeline-deep-dive.md",
-      "bytes": 15428,
-      "sha256": "4d3e167119f17e680cbfe3a9f0cc46499139fa7f2baeaa3f022f1d40aa482d70"
+      "bytes": 15388,
+      "sha256": "6356d75de7d7d40460ccec5620c6ffc7e2f45f65d111773fdf5d59bede0e127a"
     },
     {
       "path": "chapters/09-working-with-files.md",
-      "bytes": 13952,
-      "sha256": "0f9770961b0697085b433eb52a787d5582fa7970c6e547c950ace42003fce75c"
+      "bytes": 13912,
+      "sha256": "4db429a7abc1ab5afd2272d02aa0b4600b096f42bed86fb9b0ec87ffdd55dcf1"
     },
     {
       "path": "chapters/10-error-handling.md",
-      "bytes": 16356,
-      "sha256": "e2e012ccf8ef943eacde22ffcd0d28c709439041924ec6d9faf5aa061e588c40"
+      "bytes": 16353,
+      "sha256": "19f8bf367b4f24c20dc7a53de927d9a25818ae3f53ce70268e2a5c4bc05d1fa2"
     },
     {
       "path": "chapters/11-regex-and-text.md",
-      "bytes": 14389,
-      "sha256": "832ced2eef00485223a02d891c8c084a953f1f11adf51fae5ae39465e0c4c8f4"
+      "bytes": 14370,
+      "sha256": "76cea1b25e721192d02fc447d5790c6e5f094f4a93fe5598bacc5c8fa2cb06e8"
     },
     {
       "path": "chapters/12-modules-and-packages.md",
-      "bytes": 15784,
-      "sha256": "e16fa9e61ba9d496aec5ad32d2b52e18a0eee495e55de1f6dc6f144a3034c283"
+      "bytes": 15758,
+      "sha256": "fc188ef0774d22264b962da6fcc90a1a396d529ea77063ea4073ed5ca4563957"
     },
     {
       "path": "chapters/13-objects-and-dotnet.md",
-      "bytes": 17256,
-      "sha256": "b91ff7cc6c375c0c554ba0205c5b6077fe8b49c576f1e83137e97f5dfebc800e"
+      "bytes": 17220,
+      "sha256": "60eff8fb6392daf06b143eb9b40e387f6622fb5288548a5e6fa24ebea540aecb"
     },
     {
       "path": "chapters/14-remote-and-jobs.md",
-      "bytes": 17515,
-      "sha256": "d470112e7efe054ffee269f8ad0f9b6b2053e58f5281389b95b3074ecc1d7f92"
+      "bytes": 17491,
+      "sha256": "eb1cb592b1c274d1a916572e098778d6f07bc4f3bcea6a2d8f7cfcf3fe3b2f9c"
     },
     {
       "path": "chapters/15-active-directory.md",
@@ -924,13 +924,13 @@
     },
     {
       "path": "chapters/16-automation-recipes.md",
-      "bytes": 21227,
-      "sha256": "f02905b19c2dd759284b81a4adc835326620044d434032a23cec0f04a3fb3417"
+      "bytes": 21161,
+      "sha256": "198ece9595ead8db0e58d9ca28731a2a48eee85038c220d247295b5368de4bda"
     },
     {
       "path": "chapters/17-devops-and-cicd.md",
       "bytes": 24475,
-      "sha256": "0adb36ce8deaf7a2df1f72971761c860ae1a347d66b23fcd97e7d975072ce778"
+      "sha256": "d9699f7f75637191dc4095f97a101e377aa61503637994664c01225fdef8a330"
     },
     {
       "path": "docs/provenance.md",
@@ -941,6 +941,11 @@
       "path": "powershell-zero-to-hero.pdf",
       "bytes": 36601444,
       "sha256": "c42307c89db74498e94656b41cf03d7d0c42d292ac287ad4d8727f8e9595c12b"
+    },
+    {
+      "path": "scripts/validate_repository.py",
+      "bytes": 29432,
+      "sha256": "a3fa426e10dffc008aedcc4fc201b1a2a59a5835918687146254b9425ea8273c"
     },
     {
       "path": "tests/ch-01.tests.ps1",
@@ -1036,6 +1041,11 @@
       "path": "tests/test-publication-contract.py",
       "bytes": 8264,
       "sha256": "657b2e493e2b11b50caf4f9066f19dfaf6964f5d2c9a85f69ba372df78f79e88"
+    },
+    {
+      "path": "tests/test_validate_repository.py",
+      "bytes": 17747,
+      "sha256": "7590a30279d57eee8bd55b4952cc3b48810f2f726aa12233ef13600eeb5a5a58"
     }
   ]
 }

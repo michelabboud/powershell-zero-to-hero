@@ -37,6 +37,16 @@ credit:
 
 `Created by Visual Forge`
 
+## Validating Contributions
+
+Requires Python 3. Run the validator tests and then validate the repository from
+its root:
+
+```bash
+python3 -m unittest tests/test_validate_repository.py
+python3 scripts/validate_repository.py
+```
+
 ## Running the Answer Tests
 
 Requires PowerShell 7.4+ and Pester 5.5+.

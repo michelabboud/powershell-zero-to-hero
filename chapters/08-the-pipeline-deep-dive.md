@@ -448,6 +448,5 @@ optional `$tempCsv` for the output path) that:
 
 ---
 
-*Next up: [Chapter 09 -- Functions and Script Blocks](09-functions-and-script-blocks.md),
-where we learn to stop writing the same pipeline twelve times and start writing
-it once.*
+*Next up: [Chapter 09 -- Working with Files](09-working-with-files.md), where we
+put those pipelines to work on files and structured data.*

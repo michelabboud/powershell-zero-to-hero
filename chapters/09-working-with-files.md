@@ -467,5 +467,5 @@ meaningful error if a required key is missing.
 
 ---
 
-*Next up: [Chapter 10 -- Regular Expressions and String Manipulation](10-regex-and-strings.md), where
-we learn that text is just an object that hasn't been structured yet.*
+*Next up: [Chapter 10 -- Error Handling](10-error-handling.md), where we make
+file-processing failures predictable and recoverable.*

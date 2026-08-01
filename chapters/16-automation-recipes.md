@@ -621,6 +621,5 @@ with the correct expected and actual values.
 
 ---
 
-*Next up: [Chapter 17 -- Remoting and Remote Management](17-remoting.md), where
-we learn that PowerShell can run your automation recipes on every server in
-the fleet simultaneously, from one terminal.*
+*Next up: [Chapter 17 -- DevOps and CI/CD](17-devops-and-cicd.md), where we put
+automation recipes into repeatable delivery pipelines.*

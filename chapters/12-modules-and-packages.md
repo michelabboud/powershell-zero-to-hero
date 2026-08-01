@@ -486,6 +486,5 @@ Build a module called `DataUtils` with a clear public/private separation:
 
 ---
 
-*Next up: [Chapter 13 -- Remoting and Remote Management](13-remoting.md), where
-we learn that every server is just a local session you haven't authenticated to
-yet.*
+*Next up: [Chapter 13 -- Objects and .NET](13-objects-and-dotnet.md), where we
+look beneath cmdlets at the object system that powers them.*

@@ -697,5 +697,5 @@ Invoke it with `-WhatIf` and assert the dry-run behavior.
 
 ---
 
-*Next up: [Chapter 18 -- Module Development and Distribution](18-module-development.md), where
-Sam finally learns that a folder full of `.ps1` files is not a module.*
+*Continue with [Appendix A -- PowerShell Cheat Sheet](../appendices/A-cheat-sheet.md)
+for a compact reference to the commands and patterns used throughout the guide.*

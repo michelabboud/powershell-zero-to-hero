@@ -514,4 +514,4 @@ Max has one rule: every script that touches production has `$ErrorActionPreferen
 
 ---
 
-*Next: [Chapter 11 -- Functions and Modules](11-functions-and-modules.md)*
+*Next: [Chapter 11 -- Regex and Text Processing](11-regex-and-text.md)*

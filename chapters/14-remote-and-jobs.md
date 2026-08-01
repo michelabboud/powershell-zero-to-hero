@@ -518,5 +518,5 @@ the parallel block so a single failure does not abort the others.
 
 ---
 
-*Next up: [Chapter 15 -- Modules and the PowerShell Gallery](15-modules-and-gallery.md), where
-we learn that sharing is caring, and publishing is terrifying.*
+*Next up: [Chapter 15 -- Active Directory](15-active-directory.md), where we
+apply PowerShell automation to directory administration.*

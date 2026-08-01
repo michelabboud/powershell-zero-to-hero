@@ -709,4 +709,4 @@ three rules and 2 AM pages become 2-minute fixes.
 
 ---
 
-*Next: [Chapter 08 -- Modules](08-modules.md)*
+*Next: [Chapter 08 -- The Pipeline Deep Dive](08-the-pipeline-deep-dive.md)*
