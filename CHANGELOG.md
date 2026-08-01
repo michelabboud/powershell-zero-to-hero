@@ -25,6 +25,8 @@ and this project uses semantic version tags for published guide editions.
 - Hardened hosted validation by installing the exact document toolchain before
   tool-dependent Python contracts and by filtering Stop-verb discovery to
   cmdlets in the portable answer test.
+- Declared and pinned the PDF inspection utilities used by metadata and visible
+  content integration contracts on the hosted runner.
 
 ### Preserved
 

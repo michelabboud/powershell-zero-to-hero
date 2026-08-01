@@ -129,6 +129,17 @@ class GitHubWorkflowContractTests(unittest.TestCase):
         self.assertLess(repository_job.index(install), repository_job.index(run_tests))
         self.assertIn("python -m unittest discover -s tests -p 'test_*.py'", repository_job)
 
+    def test_repository_installs_exact_pdf_inspection_tools_before_tests(self) -> None:
+        text = workflow_text(VALIDATE)
+        repository_job = job_block(text, 'repository')
+        self.assertIn("POPPLER_UTILS_VERSION: '24.02.0-1ubuntu9.9'", text)
+        install = '      - name: Install exact PDF inspection utilities\n'
+        run_tests = '      - name: Run repository contracts and validation\n'
+        self.assertIn(install, repository_job)
+        self.assertLess(repository_job.index(install), repository_job.index(run_tests))
+        self.assertIn('"poppler-utils=$POPPLER_UTILS_VERSION"', repository_job)
+        self.assertIn("dpkg-query -W -f='${Version}' poppler-utils", repository_job)
+
     def test_external_actions_use_full_shas_with_version_comments(self) -> None:
         action_uses = external_action_uses(
             workflow_text(VALIDATE) + '\n' + workflow_text(BUILD),
